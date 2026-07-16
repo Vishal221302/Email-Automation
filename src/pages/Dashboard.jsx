@@ -1,5 +1,5 @@
-import React from 'react';
-import { useSelector } from 'react-redux';
+import React, { useEffect } from 'react';
+import { useSelector, useDispatch } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import {
   Mail,
@@ -32,16 +32,26 @@ import Card from '../components/ui/Card';
 import Badge from '../components/ui/Badge';
 import Button from '../components/ui/Button';
 import {
-  DAILY_EMAIL_STATS,
-  WEEKLY_ACTIVITY,
-  CATEGORY_DISTRIBUTION
+  WEEKLY_ACTIVITY
 } from '../constants/mockData';
+import { fetchSentEmails, fetchScheduledEmails } from '../redux/slices/emailsSlice';
+import { fetchAccounts } from '../redux/slices/accountsSlice';
+import { fetchTemplates } from '../redux/slices/templatesSlice';
 
 const Dashboard = () => {
   const navigate = useNavigate();
+  const dispatch = useDispatch();
   const { sentEmails, scheduledEmails } = useSelector((state) => state.emails);
   const { accounts } = useSelector((state) => state.accounts);
   const { templates } = useSelector((state) => state.templates);
+
+  // Force reload database stats on mount
+  useEffect(() => {
+    dispatch(fetchAccounts());
+    dispatch(fetchTemplates());
+    dispatch(fetchSentEmails());
+    dispatch(fetchScheduledEmails());
+  }, [dispatch]);
 
   // Dynamic calculations from Redux State
   const totalSentCount = sentEmails.filter(e => e.status === 'sent').length;
@@ -52,6 +62,71 @@ const Dashboard = () => {
   const successRate = sentEmails.length > 0 
     ? Math.round((totalSentCount / sentEmails.length) * 100) 
     : 100;
+
+  // Dynamic Daily email stats aggregation (Last 7 Days)
+  const getDailyStats = () => {
+    const statsMap = {};
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const dateStr = `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`;
+      statsMap[dateStr] = { date: dateStr, sent: 0, opened: 0 };
+    }
+
+    sentEmails.forEach(email => {
+      if (!email.sentAt) return;
+      const dateObj = new Date(email.sentAt);
+      const dateStr = `${String(dateObj.getMonth() + 1).padStart(2, '0')}/${String(dateObj.getDate()).padStart(2, '0')}`;
+      if (statsMap[dateStr]) {
+        if (email.status === 'sent') {
+          statsMap[dateStr].sent += 1;
+          if (email.openRate > 0) {
+            statsMap[dateStr].opened += 1;
+          }
+        }
+      }
+    });
+
+    return Object.values(statsMap);
+  };
+
+  // Dynamic Template Outreach Category distribution
+  const getCategoryDistribution = () => {
+    if (templates.length === 0) {
+      return [
+        { name: 'Cold Outreach', value: 0, color: '#4F46E5' },
+        { name: 'Follow-up', value: 0, color: '#06B6D4' },
+        { name: 'Newsletter', value: 0, color: '#10B981' },
+        { name: 'Custom / Other', value: 0, color: '#F59E0B' }
+      ];
+    }
+
+    const categories = {
+      'Cold Outreach': { count: 0, color: '#4F46E5' },
+      'Follow-up': { count: 0, color: '#06B6D4' },
+      'Newsletter': { count: 0, color: '#10B981' },
+      'Custom / Other': { count: 0, color: '#F59E0B' }
+    };
+
+    templates.forEach(tpl => {
+      const cat = tpl.category || 'Custom / Other';
+      if (categories[cat]) {
+        categories[cat].count += 1;
+      } else {
+        categories['Custom / Other'].count += 1;
+      }
+    });
+
+    const totalTemplates = templates.length;
+    return Object.keys(categories).map(key => ({
+      name: key,
+      value: totalTemplates > 0 ? Math.round((categories[key].count / totalTemplates) * 100) : 0,
+      color: categories[key].color
+    }));
+  };
+
+  const dynamicDailyStats = getDailyStats();
+  const dynamicCategoryDistribution = getCategoryDistribution();
 
   const kpis = [
     {
@@ -177,7 +252,7 @@ const Dashboard = () => {
           </div>
           <div className="h-[280px] w-full mt-2">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={DAILY_EMAIL_STATS} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+              <AreaChart data={dynamicDailyStats} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
                 <defs>
                   <linearGradient id="colorSent" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#4F46E5" stopOpacity={0.2} />
@@ -218,7 +293,7 @@ const Dashboard = () => {
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
-                  data={CATEGORY_DISTRIBUTION}
+                  data={dynamicCategoryDistribution}
                   cx="50%"
                   cy="50%"
                   innerRadius={60}
@@ -226,7 +301,7 @@ const Dashboard = () => {
                   paddingAngle={5}
                   dataKey="value"
                 >
-                  {CATEGORY_DISTRIBUTION.map((entry, index) => (
+                  {dynamicCategoryDistribution.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
                 </Pie>
@@ -242,12 +317,12 @@ const Dashboard = () => {
               </PieChart>
             </ResponsiveContainer>
             <div className="absolute flex flex-col items-center justify-center">
-              <span className="text-2xl font-black text-slate-950 dark:text-white">65%</span>
-              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Applications</span>
+              <span className="text-2xl font-black text-slate-950 dark:text-white">{templates.length}</span>
+              <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Templates</span>
             </div>
           </div>
           <div className="flex flex-col gap-1.5 mt-2">
-            {CATEGORY_DISTRIBUTION.map((item, idx) => (
+            {dynamicCategoryDistribution.map((item, idx) => (
               <div key={idx} className="flex items-center justify-between text-xs font-semibold">
                 <div className="flex items-center gap-2">
                   <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color }} />

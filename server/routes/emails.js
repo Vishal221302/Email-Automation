@@ -365,4 +365,76 @@ router.get('/dashboard-stats', authMiddleware, async (req, res) => {
   }
 });
 
+// Background Scheduler to process pending scheduled emails every 30 seconds
+async function checkAndSendScheduledEmails() {
+  try {
+    const now = new Date();
+    // Find all scheduled emails that are pending and their scheduled time has passed
+    const pendingSchedules = await ScheduledEmail.findAll({
+      where: {
+        status: 'pending',
+        scheduledAt: {
+          [Op.lte]: now
+        }
+      }
+    });
+
+    if (pendingSchedules.length === 0) return;
+
+    console.log(`[Scheduler] Found ${pendingSchedules.length} pending scheduled emails to process.`);
+
+    for (const schedule of pendingSchedules) {
+      // Find the associated connected account
+      const account = await ConnectedAccount.findOne({
+        where: { email: schedule.fromAccount, userId: schedule.userId }
+      });
+
+      let isSuccess = true;
+      let errorMsg = null;
+
+      if (account && account.refreshToken && account.clientId && account.clientSecret) {
+        try {
+          await sendGmailAPI(account, schedule.to, schedule.subject, schedule.body, schedule.attachments || []);
+          isSuccess = true;
+        } catch (sendErr) {
+          console.error(`[Scheduler] Google API scheduled dispatch failed for ${schedule.to}:`, sendErr.message);
+          isSuccess = false;
+          errorMsg = `Google API Delivery Failure: ${sendErr.message}`;
+        }
+      } else {
+        // Mock email dispatch for demo accounts
+        isSuccess = Math.random() > 0.05;
+        errorMsg = isSuccess ? null : 'Mail server bounced: SMTP authentication failure';
+      }
+
+      // Create sent email log in history
+      await Email.create({
+        to: schedule.to,
+        candidateName: schedule.candidateName,
+        companyName: schedule.companyName,
+        jobTitle: schedule.jobTitle,
+        subject: schedule.subject,
+        body: schedule.body,
+        fromAccount: schedule.fromAccount,
+        attachments: schedule.attachments,
+        status: isSuccess ? 'sent' : 'failed',
+        errorReason: errorMsg,
+        openRate: isSuccess ? (Math.random() > 0.4 ? 1 : 0) : 0,
+        clickRate: isSuccess ? (Math.random() > 0.7 ? 1 : 0) : 0,
+        sentAt: new Date(),
+        userId: schedule.userId
+      });
+
+      // Delete the scheduled record once processed
+      await schedule.destroy();
+      console.log(`[Scheduler] Successfully processed and dispatched scheduled email to ${schedule.to}`);
+    }
+  } catch (err) {
+    console.error('[Scheduler] Error processing scheduled emails:', err.message);
+  }
+}
+
+// Run the scheduler check loop every 30 seconds
+setInterval(checkAndSendScheduledEmails, 30000);
+
 export default router;

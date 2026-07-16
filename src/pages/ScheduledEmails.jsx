@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import {
   Calendar as CalendarIcon,
@@ -28,7 +28,8 @@ import {
   cancelScheduledEmail,
   rescheduleEmail,
   deleteScheduledEmail,
-  sendScheduledNow
+  sendScheduledNow,
+  fetchScheduledEmails
 } from '../redux/slices/emailsSlice';
 import { addNotification } from '../redux/slices/notificationsSlice';
 
@@ -37,6 +38,17 @@ const ScheduledEmails = () => {
   const toast = useToast();
   
   const { scheduledEmails } = useSelector((state) => state.emails);
+
+  // Poll scheduled list every 10 seconds to keep UI synced with backend automatic scheduler
+  useEffect(() => {
+    dispatch(fetchScheduledEmails()); // Fetch immediately on mount
+
+    const interval = setInterval(() => {
+      dispatch(fetchScheduledEmails());
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, [dispatch]);
   const [viewMode, setViewMode] = useState('list'); // 'list' | 'calendar'
   const [filterStatus, setFilterStatus] = useState('All'); // 'All' | 'pending' | 'paused' | 'cancelled'
   

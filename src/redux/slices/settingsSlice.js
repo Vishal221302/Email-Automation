@@ -6,11 +6,9 @@ const initialState = {
   defaultTemplate: 'tpl_1',
   timezone: 'Asia/Kolkata',
   language: 'en-US',
-  signature: 'Best regards,\nAlex Harrison\nSoftware Engineer',
-  autoAttachResume: true,
-  attachedResumes: [
-    { name: 'Alex_Harrison_Resume.pdf', size: '245 KB', isDefault: true }
-  ],
+  signature: '',
+  autoAttachResume: false,
+  attachedResumes: [],
   notifications: {
     emailSent: true,
     emailFailed: true,

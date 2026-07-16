@@ -40,19 +40,22 @@ const FileUpload = ({
     setIsUploading(true);
     setUploadProgress(0);
 
-    // Simulate progress
+    // Simulate progress using a local tracking variable to prevent React StrictMode double-execution bug
+    let currentProgress = 0;
     const interval = setInterval(() => {
-      setUploadProgress((prev) => {
-        if (prev >= 100) {
-          clearInterval(interval);
-          setIsUploading(false);
-          if (onFileSelect) {
-            onFileSelect(file);
-          }
-          return 100;
+      currentProgress += 10;
+      if (currentProgress >= 100) {
+        clearInterval(interval);
+        setIsUploading(false);
+        if (onFileSelect) {
+          onFileSelect(file);
         }
-        return prev + 10;
-      });
+        // Reset the upload dropzone state so the file is not shown twice
+        setSelectedFile(null);
+        setUploadProgress(0);
+      } else {
+        setUploadProgress(currentProgress);
+      }
     }, 150);
   };
 

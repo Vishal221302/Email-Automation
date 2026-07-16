@@ -12,7 +12,12 @@ import {
   ChevronDown,
   ChevronUp,
   Sparkles,
-  Info
+  Info,
+  FileText,
+  Image,
+  Film,
+  Music,
+  File
 } from 'lucide-react';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
@@ -55,7 +60,7 @@ const ComposeEmail = () => {
     subject: '',
     body: '',
     templateId: '',
-    candidateName: 'Alex Harrison',
+    candidateName: '',
     companyName: '',
     jobTitle: ''
   };
@@ -125,6 +130,22 @@ const ComposeEmail = () => {
       .replace(/{{company_name}}/g, watchCompanyName || '[Company Name]')
       .replace(/{{job_title}}/g, watchJobTitle || '[Job Title]')
       .replace(/{{today_date}}/g, new Date().toLocaleDateString());
+  };
+
+  const getFileIcon = (file) => {
+    const mime = file.mimeType || '';
+    const name = file.name?.toLowerCase() || '';
+    if (mime.startsWith('image/') || /\.(png|jpg|jpeg|gif|webp|svg)$/.test(name))
+      return <Image className="w-3.5 h-3.5 text-emerald-500" />;
+    if (mime.startsWith('video/') || /\.(mp4|mov|avi|mkv)$/.test(name))
+      return <Film className="w-3.5 h-3.5 text-purple-500" />;
+    if (mime.startsWith('audio/') || /\.(mp3|wav|ogg)$/.test(name))
+      return <Music className="w-3.5 h-3.5 text-pink-500" />;
+    if (/\.(pdf)$/.test(name))
+      return <FileText className="w-3.5 h-3.5 text-red-500" />;
+    if (/\.(doc|docx)$/.test(name))
+      return <FileText className="w-3.5 h-3.5 text-blue-500" />;
+    return <File className="w-3.5 h-3.5 text-slate-400" />;
   };
 
   const handleFileAttach = (file) => {
@@ -327,7 +348,7 @@ const ComposeEmail = () => {
                     key={idx}
                     className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-xs font-semibold"
                   >
-                    <Paperclip className="w-3.5 h-3.5 text-slate-400" />
+                    {getFileIcon(file)}
                     <span className="text-slate-600 dark:text-slate-300 max-w-[150px] truncate">{file.name}</span>
                     <span className="text-[10px] text-slate-400">({file.size})</span>
                     <button
@@ -342,12 +363,12 @@ const ComposeEmail = () => {
               </div>
             )}
 
-            {/* Attach File Field */}
+            {/* Attach File Field - All types supported */}
             <FileUpload
-              accept=".pdf,.docx,.doc"
-              maxSizeMB={5}
-              label="Add additional cover assets or resumes"
-              sublabel="Max size 5MB (PDF/DOCX)"
+              accept="*"
+              maxSizeMB={25}
+              label="Attach files — documents, images, videos, audio"
+              sublabel="PDF, DOCX, PNG, JPG, MP4, MP3 and more · Max 25MB"
               onFileSelect={handleFileAttach}
             />
 

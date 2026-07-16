@@ -264,28 +264,31 @@ router.get('/inbox/:id', authMiddleware, async (req, res) => {
 
     const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
     
-    // List latest 10 messages in inbox
+    // List latest 50 messages in inbox (increased from 10 to show a comprehensive list)
     const listRes = await gmail.users.messages.list({
       userId: 'me',
       q: 'label:INBOX',
-      maxResults: 10
+      maxResults: 50
     });
 
     const messages = listRes.data.messages || [];
-    const emails = [];
 
-    // Fetch individual email bodies
-    for (const msg of messages) {
+    // Fetch individual email bodies in parallel for significantly faster loading speeds
+    const emailPromises = messages.map(async (msg) => {
       try {
         const msgRes = await gmail.users.messages.get({
           userId: 'me',
           id: msg.id
         });
-        emails.push(parseGmailMessage(msgRes.data));
+        return parseGmailMessage(msgRes.data);
       } catch (e) {
         console.error(`Failed to parse Gmail message ${msg.id}:`, e.message);
+        return null;
       }
-    }
+    });
+
+    const resolvedEmails = await Promise.all(emailPromises);
+    const emails = resolvedEmails.filter(e => e !== null);
 
     res.json(emails);
   } catch (err) {

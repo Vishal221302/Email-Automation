@@ -24,7 +24,7 @@ import Badge from '../components/ui/Badge';
 import Modal from '../components/ui/Modal';
 import Button from '../components/ui/Button';
 import { useToast } from '../components/ui/Toast';
-import { setCurrentCompose } from '../redux/slices/emailsSlice';
+import { setCurrentCompose, fetchSentEmails } from '../redux/slices/emailsSlice';
 import { fetchAccounts } from '../redux/slices/accountsSlice';
 import api from '../services/api';
 
@@ -59,8 +59,9 @@ const SentEmails = () => {
       setFilterStatus('All');
     }
     
-    // Load accounts list for dropdown
+    // Load accounts list and fresh outbox history from database
     dispatch(fetchAccounts());
+    dispatch(fetchSentEmails());
   }, [location.pathname, dispatch]);
 
   // Set default selected account when accounts load

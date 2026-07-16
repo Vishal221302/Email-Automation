@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -12,7 +12,8 @@ import {
   FileText,
   Users,
   Settings,
-  Sparkles
+  Sparkles,
+  Download
 } from 'lucide-react';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
@@ -44,6 +45,32 @@ const BulkEmail = () => {
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
   const [senderAccount, setSenderAccount] = useState(accounts[0]?.email || '');
 
+  // Auto-sync sender account when accounts load from Redux store
+  useEffect(() => {
+    if (accounts.length > 0 && !senderAccount) {
+      setSenderAccount(accounts.find(a => a.isPrimary)?.email || accounts[0]?.email || '');
+    }
+  }, [accounts, senderAccount]);
+
+  const downloadSampleCSV = () => {
+    const csvContent = "email,candidate_name,company_name,job_title\n" +
+      "hiring@airbnb.com,Alex Harrison,Airbnb,Staff UI Engineer\n" +
+      "careers@figma.com,Rahul Sharma,Figma,Product Engineer\n" +
+      "recruiting@stripe.com,Amit Patel,Stripe,Frontend Lead\n" +
+      "jobs@uber.com,Priya Verma,Uber,Senior React Developer\n";
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", "sample_candidates.csv");
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success('Download Success', 'Sample CSV template downloaded successfully.');
+  };
+
   // Mock candidates to load if the user uploads a CSV
   const dummyCSVRows = [
     { email: 'hiring@airbnb.com', candidate_name: 'Alex Harrison', company_name: 'Airbnb', job_title: 'Staff UI Engineer' },
@@ -56,9 +83,77 @@ const BulkEmail = () => {
 
   const handleCSVUpload = (file) => {
     if (file) {
-      dispatch(setCSVData({ fileName: file.name, candidates: dummyCSVRows }));
-      toast.success('CSV Parsed', `Loaded ${dummyCSVRows.length} contacts from ${file.name}.`);
-      setActiveStep(2);
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const text = e.target.result;
+        const rows = text.split(/\r?\n/);
+        if (rows.length < 2) {
+          toast.error('Parse Error', 'The CSV file seems to be empty or has no data rows.');
+          return;
+        }
+
+        // Parse headers (first line)
+        const headers = rows[0].split(',').map(h => h.trim().replace(/^["']|["']$/g, '').toLowerCase());
+        
+        // Find header indexes (flexible names support)
+        const emailIdx = headers.indexOf('email');
+        const nameIdx = headers.findIndex(h => h.includes('name') || h === 'candidate_name');
+        const companyIdx = headers.findIndex(h => h.includes('company') || h === 'company_name');
+        const titleIdx = headers.findIndex(h => h.includes('title') || h === 'job_title' || h.includes('role') || h.includes('custom'));
+
+        if (emailIdx === -1) {
+          toast.error('Validation Error', 'CSV must contain an "email" column.');
+          return;
+        }
+
+        const parsedCandidates = [];
+
+        // Parse remaining data lines
+        for (let i = 1; i < rows.length; i++) {
+          const rowText = rows[i].trim();
+          if (!rowText) continue;
+
+          // Split columns while taking quotes into account
+          const values = [];
+          let currentVal = '';
+          let insideQuotes = false;
+          
+          for (let charIdx = 0; charIdx < rowText.length; charIdx++) {
+            const char = rowText[charIdx];
+            if (char === '"' || char === "'") {
+              insideQuotes = !insideQuotes;
+            } else if (char === ',' && !insideQuotes) {
+              values.push(currentVal.trim().replace(/^["']|["']$/g, ''));
+              currentVal = '';
+            } else {
+              currentVal += char;
+            }
+          }
+          values.push(currentVal.trim().replace(/^["']|["']$/g, ''));
+
+          if (values.length === 0 || (values.length === 1 && values[0] === '')) continue;
+
+          parsedCandidates.push({
+            email: values[emailIdx] || '',
+            candidate_name: nameIdx !== -1 ? values[nameIdx] || '' : '',
+            company_name: companyIdx !== -1 ? values[companyIdx] || '' : '',
+            job_title: titleIdx !== -1 ? values[titleIdx] || '' : ''
+          });
+        }
+
+        if (parsedCandidates.length === 0) {
+          toast.error('Validation Error', 'No valid recipient records found in the CSV.');
+          return;
+        }
+
+        dispatch(setCSVData({ fileName: file.name, candidates: parsedCandidates }));
+        toast.success('CSV Parsed', `Loaded ${parsedCandidates.length} contacts from ${file.name}.`);
+        setActiveStep(2);
+      };
+      reader.onerror = () => {
+        toast.error('Read Error', 'Failed to read the selected CSV file.');
+      };
+      reader.readAsText(file);
     }
   };
 
@@ -124,7 +219,7 @@ const BulkEmail = () => {
 
         toast.success(
           'Bulk Run Completed',
-          `Dispatched ${validCandidates.length} custom candidates emails successfully.`
+          `Dispatched ${validCandidates.length} personalized emails successfully.`
         );
       }
     }, 600);
@@ -145,7 +240,7 @@ const BulkEmail = () => {
             Bulk Email Campaign
           </h1>
           <p className="text-sm text-slate-400 dark:text-slate-400 mt-1">
-            Upload CSV candidate sheets, map fields, run validation, and execute mass personalized applications.
+            Upload CSV recipient sheets, map variable fields, validate data, and launch bulk personalized outreach.
           </p>
         </div>
         {fileName && (
@@ -158,9 +253,9 @@ const BulkEmail = () => {
       {/* Steps indicator */}
       <div className="grid grid-cols-3 border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900/30 p-2.5 rounded-card">
         {[
-          { step: 1, label: 'Upload Candidates', desc: 'Drop CSV file' },
-          { step: 2, label: 'Validate Fields', desc: 'Inspect layout formatting' },
-          { step: 3, label: 'Configure & Dispatch', desc: 'Select template & trigger' }
+          { step: 1, label: 'Upload Contacts', desc: 'Drop CSV sheet' },
+          { step: 2, label: 'Validate Variables', desc: 'Verify recipient details' },
+          { step: 3, label: 'Configure & Launch', desc: 'Select template & dispatch' }
         ].map((item) => (
           <div
             key={item.step}
@@ -196,15 +291,23 @@ const BulkEmail = () => {
               <Database className="w-8 h-8" />
             </div>
             <div className="max-w-md">
-              <h3 className="text-base font-bold text-slate-950 dark:text-white">Import Candidates Contacts</h3>
+              <h3 className="text-base font-bold text-slate-950 dark:text-white">Import Contacts & Recipients</h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
-                Import CSV files. Ensure headings include: <code className="px-1 py-0.5 bg-slate-100 dark:bg-slate-800 text-[10px]">email</code>, <code className="px-1 py-0.5 bg-slate-100 dark:bg-slate-800 text-[10px]">candidate_name</code>, <code className="px-1 py-0.5 bg-slate-100 dark:bg-slate-800 text-[10px]">company_name</code>, and <code className="px-1 py-0.5 bg-slate-100 dark:bg-slate-800 text-[10px]">job_title</code>.
+                Import your CSV contact list. Use column headers: <code className="px-1 py-0.5 bg-slate-100 dark:bg-slate-800 text-[10px]">email</code>, <code className="px-1 py-0.5 bg-slate-100 dark:bg-slate-800 text-[10px]">candidate_name</code> (as name), <code className="px-1 py-0.5 bg-slate-100 dark:bg-slate-800 text-[10px]">company_name</code> (as company), and <code className="px-1 py-0.5 bg-slate-100 dark:bg-slate-800 text-[10px]">job_title</code> (as custom field/role).
               </p>
+              <button
+                type="button"
+                onClick={downloadSampleCSV}
+                className="mt-3.5 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-primary hover:text-indigo-400 bg-primary/5 dark:bg-primary/10 hover:bg-primary/10 rounded-button cursor-pointer border border-primary/20 hover:border-primary/30 transition-all"
+              >
+                <Download className="w-3.5 h-3.5" />
+                Download Sample CSV
+              </button>
             </div>
             <FileUpload
               accept=".csv"
               maxSizeMB={2}
-              label="Select candidate outbox spreadsheet (.csv)"
+              label="Select campaign recipient spreadsheet (.csv)"
               sublabel="Drop sheet or click to upload demo data"
               onFileSelect={handleCSVUpload}
               className="max-w-xl mt-2"
@@ -215,11 +318,11 @@ const BulkEmail = () => {
         {/* Step 2: Validate Contacts Grid */}
         {activeStep === 2 && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Candidates validation table */}
+            {/* Contacts validation table */}
             <Card className="lg:col-span-2 flex flex-col gap-4">
               <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/80 pb-3">
                 <div>
-                  <h3 className="text-base font-bold text-slate-950 dark:text-white">Candidate Formatting Checks</h3>
+                  <h3 className="text-base font-bold text-slate-950 dark:text-white">Recipient Variable Validation</h3>
                   <p className="text-xs text-slate-400">Total: {candidates.length} records parsed</p>
                 </div>
                 <div className="flex gap-2">
@@ -233,9 +336,9 @@ const BulkEmail = () => {
                   <thead className="bg-slate-50 dark:bg-slate-900/10 font-semibold text-slate-500 uppercase tracking-wider">
                     <tr>
                       <th className="px-4 py-3">Email Address</th>
-                      <th className="px-4 py-3">Name</th>
-                      <th className="px-4 py-3">Company</th>
-                      <th className="px-4 py-3">Target Role</th>
+                      <th className="px-4 py-3">Recipient Name</th>
+                      <th className="px-4 py-3">Company / Org</th>
+                      <th className="px-4 py-3">Role / Custom Field</th>
                       <th className="px-4 py-3 text-right">Validation</th>
                     </tr>
                   </thead>
@@ -284,7 +387,7 @@ const BulkEmail = () => {
                   </div>
                   <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded-[12px] border border-slate-200 dark:border-slate-800">
                     <span className="text-[10px] font-bold text-danger uppercase tracking-wider block">Line 6 - name check</span>
-                    <span className="text-xs text-slate-400 mt-0.5 block">"candidate_name" is required for cover letter rendering.</span>
+                    <span className="text-xs text-slate-400 mt-0.5 block">"candidate_name" is required for email personalization.</span>
                   </div>
                 </div>
               </Card>
@@ -328,7 +431,7 @@ const BulkEmail = () => {
                   {/* Select Outreach Template */}
                   <div className="flex flex-col gap-1.5 text-left">
                     <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                      Apply Outreach Template
+                      Apply Email Template
                     </label>
                     <select
                       value={selectedTemplateId}
@@ -409,14 +512,14 @@ const BulkEmail = () => {
               <Card className="flex flex-col gap-4 text-left">
                 <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-2">
                   <Sparkles className="w-4.5 h-4.5 text-indigo-500" />
-                  <h4 className="text-sm font-bold text-slate-950 dark:text-white">Relay Analytics</h4>
+                  <h4 className="text-sm font-bold text-slate-950 dark:text-white">Campaign Automation</h4>
                 </div>
                 <div className="flex flex-col gap-2.5 text-xs text-slate-500 dark:text-slate-400">
                   <p>
-                    Each candidate's name, target role, and company are injected into the template dynamically.
+                    Each recipient's custom details (name, company, and role/field) are dynamically merged into your email template placeholders.
                   </p>
                   <p>
-                    We apply a randomized dispatch delay (simulated) of 1-3 seconds between messages to comply with anti-spam rate caps.
+                    We apply standard rate limits with built-in dispatch delays to protect your sender domain reputation.
                   </p>
                 </div>
               </Card>

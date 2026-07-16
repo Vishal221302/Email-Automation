@@ -65,10 +65,10 @@ const Login = () => {
             <Sparkles className="w-7 h-7" />
           </div>
           <h1 className="text-xl font-extrabold tracking-tight bg-gradient-to-r from-slate-900 to-indigo-900 dark:from-white dark:to-slate-350 bg-clip-text text-transparent m-0 mt-1">
-            Antigravity Mail Workspace
+            MailFlow Pro
           </h1>
           <p className="text-xs text-slate-450 dark:text-slate-550 max-w-xs leading-normal font-semibold">
-            Access secure, automated SMTP pipelines for personalized cover letter outreach campaigns.
+            Smart email automation, Gmail OAuth & outreach campaigns — all in one place.
           </p>
         </div>
 

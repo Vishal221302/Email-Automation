@@ -104,7 +104,7 @@ const Sidebar = ({ isCollapsed, setIsCollapsed, isMobileOpen, setIsMobileOpen })
               exit={{ opacity: 0 }}
               className="text-base font-bold tracking-tight bg-gradient-to-r from-slate-900 to-indigo-900 dark:from-white dark:to-slate-300 bg-clip-text text-transparent"
             >
-              Antigravity Mail
+              MailFlow Pro
             </motion.span>
           )}
         </div>
