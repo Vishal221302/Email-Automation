@@ -6,12 +6,16 @@ import Navbar from '../components/Navbar';
 import { fetchAccounts } from '../redux/slices/accountsSlice';
 import { fetchTemplates } from '../redux/slices/templatesSlice';
 import { fetchSentEmails, fetchScheduledEmails } from '../redux/slices/emailsSlice';
+import useEmailPoller from '../hooks/useEmailPoller';
 
 const DashboardLayout = () => {
   const dispatch = useDispatch();
   const { theme } = useSelector((state) => state.settings);
   const { isAuthenticated } = useSelector((state) => state.auth);
   const [isCollapsed, setIsCollapsed] = useState(false);
+
+  // Start background Gmail inbox polling for real-time notifications
+  useEmailPoller();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
 
   // Initialize theme class on mount

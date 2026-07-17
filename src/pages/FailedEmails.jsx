@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import {
   Search,
   Eye,
-  Mail,
   RefreshCw,
   Calendar,
+  Mail,
   ArrowUpRight
 } from 'lucide-react';
 import Card from '../components/ui/Card';
@@ -19,25 +19,25 @@ import { setCurrentCompose } from '../redux/slices/emailsSlice';
 import { fetchAccounts } from '../redux/slices/accountsSlice';
 import api from '../services/api';
 
-const SentEmails = () => {
+const FailedEmails = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const location = useLocation();
   const toast = useToast();
 
   const { accounts } = useSelector((state) => state.accounts);
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [gmailSentEmails, setGmailSentEmails] = useState([]);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [selectedGmailEmail, setSelectedGmailEmail] = useState(null);
+  const [gmailBounces, setGmailBounces] = useState([]);
+  const [isSyncingGmail, setIsSyncingGmail] = useState(false);
   const [selectedAccountId, setSelectedAccountId] = useState('');
+  const [selectedGmailBounce, setSelectedGmailBounce] = useState(null);
 
+  // Fetch accounts list on mount
   useEffect(() => {
     dispatch(fetchAccounts());
   }, [dispatch]);
 
-  // Set default account once accounts load
+  // Set default selected account when accounts load
   useEffect(() => {
     if (accounts.length > 0 && !selectedAccountId) {
       const primary = accounts.find(a => a.isPrimary);
@@ -45,59 +45,65 @@ const SentEmails = () => {
     }
   }, [accounts, selectedAccountId]);
 
-  // Auto-sync on mount when account is ready
+  // Auto-sync Gmail bounces on mount / account change
   useEffect(() => {
-    if (selectedAccountId && gmailSentEmails.length === 0) {
-      handleSyncGmailSent(selectedAccountId);
+    if (selectedAccountId && gmailBounces.length === 0) {
+      handleSyncGmailBounces(selectedAccountId);
     }
   }, [selectedAccountId]);
 
-  const handleSyncGmailSent = async (accountId) => {
+  const handleSyncGmailBounces = async (accountId) => {
     if (!accountId) return;
-    setIsSyncing(true);
+    setIsSyncingGmail(true);
     try {
-      const response = await api.get(`/accounts/sent/${accountId}`);
-      setGmailSentEmails(response.data);
-      toast.success('Gmail Synced', `Fetched ${response.data.length} sent emails from Gmail.`);
+      const response = await api.get(`/accounts/bounces/${accountId}`);
+      setGmailBounces(response.data);
+      toast.success('Bounces Synced', `Fetched ${response.data.length} delivery failure notifications.`);
     } catch (err) {
-      toast.error('Sync Failed', err.response?.data?.error || 'Could not connect to Gmail API.');
+      toast.error('Sync Error', err.response?.data?.error || 'Failed to fetch bounces from Google.');
     } finally {
-      setIsSyncing(false);
+      setIsSyncingGmail(false);
     }
   };
 
-  const handleDuplicate = (email) => {
-    dispatch(setCurrentCompose(email));
-    toast.success('Compose Populated', 'Email details copied to compose page.');
+  const handleRetry = (email) => {
+    dispatch(setCurrentCompose({
+      to: email.to,
+      candidateName: '',
+      companyName: '',
+      jobTitle: '',
+      subject: email.subject,
+      body: email.body,
+      fromAccount: '',
+      attachments: []
+    }));
+    toast.success('Loaded in Compose', 'Pre-filled compose form to retry sending.');
     navigate('/compose');
   };
 
-  // Filter Gmail sent
-  const filteredGmailSent = gmailSentEmails.filter((item) =>
-    (item.to || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (item.subject || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (item.snippet || '').toLowerCase().includes(searchQuery.toLowerCase())
+  // Filter synced Gmail bounces
+  const filteredGmailBounces = gmailBounces.filter((item) =>
+    item.from.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (item.subject && item.subject.toLowerCase().includes(searchQuery.toLowerCase())) ||
+    (item.snippet && item.snippet.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
-  // ── Gmail Sent Columns ─────────────────────────────────────────────
+  // ── GMAIL SYNCHRONIZED BOUNCES COLUMNS ───────────────────────────
   const gmailColumns = [
     {
-      key: 'to',
-      header: 'Recipient',
+      key: 'from',
+      header: 'Sender Details',
       render: (row) => {
-        const toRaw = row.to || '';
-        const toName = toRaw.split('<')[0].trim() || toRaw;
-        const toEmail = toRaw.includes('<') ? toRaw.match(/<([^>]+)>/)?.[1] : toRaw;
+        const fromName = row.from.split('<')[0].trim() || 'Mail Delivery';
+        const fromEmail = row.from.includes('<') ? row.from.match(/<([^>]+)>/)?.[1] : row.from;
         return (
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-full bg-indigo-50 dark:bg-slate-800 flex items-center justify-center text-indigo-500 dark:text-indigo-400 text-xs font-black shadow-sm shrink-0">
-              {toName[0] ? toName[0].toUpperCase() : 'U'}
+            <div className="w-8 h-8 rounded-full bg-red-50 dark:bg-red-950/20 flex items-center justify-center text-red-500 dark:text-red-400 text-xs font-black shadow-sm shrink-0">
+              M
             </div>
             <div className="flex flex-col min-w-0">
-              <span className="font-bold text-slate-800 dark:text-slate-200 truncate">{toName}</span>
-              {toEmail && toEmail !== toName && (
-                <span className="text-[10px] text-slate-400 truncate">{toEmail}</span>
-              )}
+              <span className="font-bold text-slate-800 dark:text-slate-200 truncate">{fromName}</span>
+              <span className="text-[10px] text-slate-400 dark:text-slate-550 truncate">{fromEmail}</span>
             </div>
           </div>
         );
@@ -105,19 +111,23 @@ const SentEmails = () => {
     },
     {
       key: 'subject',
-      header: 'Subject / Snippet',
+      header: 'Email / Bounce Snippet',
       render: (row) => (
-        <div className="flex flex-col max-w-[360px] min-w-0">
-          <span className="font-bold text-slate-700 dark:text-slate-200 truncate">{row.subject || '(No Subject)'}</span>
-          <span className="text-xs text-slate-400 truncate mt-0.5">{row.snippet}</span>
+        <div className="flex flex-col max-w-[380px] min-w-0">
+          <span className="font-bold text-slate-700 dark:text-slate-150 truncate leading-snug">
+            {row.subject || '(No Subject)'}
+          </span>
+          <span className="text-xs text-slate-400 dark:text-slate-400 truncate mt-0.5 leading-snug">
+            {row.snippet}
+          </span>
         </div>
       )
     },
     {
       key: 'date',
-      header: 'Sent At',
+      header: 'Received At',
       render: (row) => (
-        <span className="text-xs text-slate-400 font-semibold flex items-center gap-1.5">
+        <span className="text-xs text-slate-400 dark:text-slate-400 font-semibold flex items-center gap-1.5 whitespace-nowrap">
           <Calendar className="w-3.5 h-3.5" />
           {row.date}
         </span>
@@ -130,23 +140,24 @@ const SentEmails = () => {
       render: (row) => (
         <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
           <button
-            onClick={() => setSelectedGmailEmail(row)}
+            onClick={() => setSelectedGmailBounce(row)}
             className="p-1.5 rounded hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer"
-            title="Read email"
+            title="Read bounce detail"
           >
             <Eye className="w-4.5 h-4.5" />
           </button>
           <button
             onClick={(e) => {
               e.stopPropagation();
-              handleDuplicate({
-                to: (row.to || '').match(/<([^>]+)>/)?.[1] || row.to,
-                subject: row.subject,
+              const recipientEmail = row.body.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i)?.[1] || '';
+              handleRetry({
+                to: recipientEmail,
+                subject: `Retry: ${row.subject.replace('Delivery Status Notification (Failure)', '').trim()}`,
                 body: ''
               });
             }}
             className="p-1.5 rounded hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-400 hover:text-primary cursor-pointer"
-            title="Open in Compose"
+            title="Compose quick retry"
           >
             <ArrowUpRight className="w-4.5 h-4.5" />
           </button>
@@ -161,10 +172,10 @@ const SentEmails = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white m-0">
-            Sent Emails
+            Failed Emails
           </h1>
           <p className="text-sm text-slate-400 mt-1">
-            Real-time sync of your Gmail sent folder.
+            Real-time Gmail bounce reports and delivery failures.
           </p>
         </div>
       </div>
@@ -175,20 +186,21 @@ const SentEmails = () => {
           <Search className="absolute left-3.5 top-2.5 h-4.5 w-4.5 text-slate-400" />
           <input
             type="text"
-            placeholder="Search sent emails..."
+            placeholder="Search Gmail bounces..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-10 pr-4 py-2 text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-[12px] focus:outline-none focus:ring-2 focus:ring-primary/20 text-slate-900 dark:text-white"
           />
         </div>
 
-        <div className="flex items-center gap-3 shrink-0">
+        {/* Sync Controls */}
+        <div className="flex items-center gap-3 w-full sm:w-auto shrink-0">
           {accounts.length > 0 && (
             <select
               value={selectedAccountId}
               onChange={(e) => {
                 setSelectedAccountId(e.target.value);
-                setGmailSentEmails([]);
+                setGmailBounces([]);
               }}
               className="py-2 px-3 rounded-[12px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-primary/20 text-slate-700 dark:text-slate-200 max-w-[220px]"
             >
@@ -198,93 +210,94 @@ const SentEmails = () => {
             </select>
           )}
           <button
-            onClick={() => { setGmailSentEmails([]); handleSyncGmailSent(selectedAccountId); }}
-            disabled={isSyncing || !selectedAccountId}
+            onClick={() => { setGmailBounces([]); handleSyncGmailBounces(selectedAccountId); }}
+            disabled={isSyncingGmail || !selectedAccountId}
             className="flex items-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-[12px] border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:border-primary/50 hover:text-primary transition-colors disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin text-primary' : ''}`} />
-            {isSyncing ? 'Syncing...' : 'Sync Gmail'}
+            <RefreshCw className={`w-3.5 h-3.5 ${isSyncingGmail ? 'animate-spin text-primary' : ''}`} />
+            {isSyncingGmail ? 'Syncing...' : 'Sync Bounces'}
           </button>
         </div>
       </div>
 
-      {/* Gmail Sent Table */}
+      {/* Gmail Bounces Table */}
       <Card className="p-0 overflow-hidden relative">
-        {isSyncing && gmailSentEmails.length === 0 ? (
+        {isSyncingGmail && gmailBounces.length === 0 ? (
           <div className="flex flex-col items-center justify-center p-20 gap-3 text-slate-400">
             <RefreshCw className="w-8 h-8 text-primary animate-spin" />
-            <span className="text-sm font-bold text-slate-500">Connecting to Gmail API...</span>
+            <span className="text-sm font-bold text-slate-500">Connecting Gmail bounce reporter...</span>
           </div>
         ) : (
           <Table
             columns={gmailColumns}
-            data={filteredGmailSent}
-            onRowClick={(row) => setSelectedGmailEmail(row)}
-            emptyMessage="No Gmail sent emails found. Click 'Sync Gmail' to load your sent emails."
+            data={filteredGmailBounces}
+            onRowClick={(row) => setSelectedGmailBounce(row)}
+            emptyMessage="No synced bounce notifications found. Click 'Sync Bounces' to fetch Google delivery reports."
           />
         )}
       </Card>
 
-      {/* Gmail Sent Detail Modal */}
+      {/* ── GMAIL BOUNCE REPORT DETAIL MODAL ─────────────────────────── */}
       <Modal
-        isOpen={selectedGmailEmail !== null}
-        onClose={() => setSelectedGmailEmail(null)}
-        title="Gmail Sent Email"
+        isOpen={selectedGmailBounce !== null}
+        onClose={() => setSelectedGmailBounce(null)}
+        title="Gmail Bounce Message details"
         size="lg"
       >
-        {selectedGmailEmail && (
+        {selectedGmailBounce && (
           <div className="flex flex-col gap-5 text-left">
             <div className="p-4 bg-slate-50 dark:bg-slate-900 rounded-[12px] border border-slate-200 dark:border-slate-800 flex flex-col gap-2.5 text-xs text-slate-500">
               <div className="flex justify-between items-center">
                 <div className="flex gap-2">
                   <span className="font-bold w-12 text-right">From:</span>
-                  <span className="text-slate-700 dark:text-slate-300 font-medium">{selectedGmailEmail.from}</span>
+                  <span className="text-slate-700 dark:text-slate-300 font-medium">{selectedGmailBounce.from}</span>
                 </div>
-                <Badge variant="success">SENT</Badge>
+                <Badge variant="neutral">INBOX</Badge>
               </div>
               <div className="flex gap-2">
                 <span className="font-bold w-12 text-right">To:</span>
-                <span className="text-slate-700 dark:text-slate-300 font-medium">{selectedGmailEmail.to}</span>
+                <span className="text-slate-700 dark:text-slate-300 font-medium">{selectedGmailBounce.to}</span>
               </div>
               <div className="flex gap-2">
                 <span className="font-bold w-12 text-right">Date:</span>
-                <span className="text-slate-700 dark:text-slate-300 font-medium">{selectedGmailEmail.date}</span>
+                <span className="text-slate-700 dark:text-slate-300 font-medium">{selectedGmailBounce.date}</span>
               </div>
               <div className="flex gap-2 border-t border-slate-150 dark:border-slate-800 pt-2.5">
                 <span className="font-bold w-12 text-right">Subject:</span>
-                <span className="text-slate-900 dark:text-white font-bold">{selectedGmailEmail.subject || '(No Subject)'}</span>
+                <span className="text-slate-900 dark:text-white font-bold">{selectedGmailBounce.subject}</span>
               </div>
             </div>
 
-            <div className="p-5 bg-white dark:bg-slate-900/60 border border-slate-150 dark:border-slate-800/80 rounded-[12px] min-h-[220px] max-h-[360px] overflow-y-auto">
-              {selectedGmailEmail.body && selectedGmailEmail.body.includes('<') ? (
+            <div className="p-5 bg-white dark:bg-slate-900 border border-slate-150 dark:border-slate-800/80 rounded-[12px] min-h-[220px] max-h-[350px] overflow-y-auto">
+              {selectedGmailBounce.body && selectedGmailBounce.body.includes('<') && selectedGmailBounce.body.includes('>') ? (
                 <div
-                  className="text-sm font-sans text-slate-700 dark:text-slate-300 leading-relaxed break-words"
-                  dangerouslySetInnerHTML={{ __html: selectedGmailEmail.body }}
+                  className="text-sm font-sans text-slate-750 dark:text-slate-250 leading-relaxed break-words"
+                  dangerouslySetInnerHTML={{ __html: selectedGmailBounce.body }}
                 />
               ) : (
-                <pre className="text-sm font-sans text-slate-700 dark:text-slate-300 whitespace-pre-wrap leading-relaxed">
-                  {selectedGmailEmail.body || selectedGmailEmail.snippet}
+                <pre className="text-sm font-sans text-slate-700 dark:text-slate-350 whitespace-pre-wrap leading-relaxed">
+                  {selectedGmailBounce.body || selectedGmailBounce.snippet}
                 </pre>
               )}
             </div>
 
             <div className="flex justify-end gap-3.5 border-t border-slate-100 dark:border-slate-700/50 pt-4">
-              <Button variant="outline" size="sm" onClick={() => setSelectedGmailEmail(null)}>Close</Button>
+              <Button variant="outline" size="sm" onClick={() => setSelectedGmailBounce(null)}>Close</Button>
               <Button
                 variant="primary"
                 size="sm"
                 icon={Mail}
                 onClick={() => {
-                  handleDuplicate({
-                    to: (selectedGmailEmail.to || '').match(/<([^>]+)>/)?.[1] || selectedGmailEmail.to,
-                    subject: selectedGmailEmail.subject,
+                  const recipientEmail = selectedGmailBounce.body.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i)?.[1] || '';
+                  handleRetry({
+                    to: recipientEmail,
+                    subject: `Retry: ${selectedGmailBounce.subject.replace('Delivery Status Notification (Failure)', '').trim()}`,
                     body: ''
                   });
-                  setSelectedGmailEmail(null);
+                  setSelectedGmailBounce(null);
                 }}
               >
-                Open in Compose
+                Reply / Retry in Compose
               </Button>
             </div>
           </div>
@@ -294,4 +307,4 @@ const SentEmails = () => {
   );
 };
 
-export default SentEmails;
+export default FailedEmails;

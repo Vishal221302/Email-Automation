@@ -119,26 +119,26 @@ const FileUpload = ({
           onDragOver={onDrag}
           onDragLeave={onDrag}
           onDrop={onDrop}
-          whileHover={{ scale: 1.005 }}
-          className={`w-full p-8 rounded-card border-2 border-dashed transition-all flex flex-col items-center justify-center gap-3 cursor-pointer text-center
+          whileHover={{ scale: 1.002 }}
+          className={`w-full p-3.5 rounded-[12px] border border-dashed transition-all flex items-center gap-3 cursor-pointer
             ${dragActive
               ? 'border-primary bg-primary/5 dark:bg-primary/5'
-              : 'border-slate-200 dark:border-slate-800 hover:border-primary/50 hover:bg-slate-50/50 dark:hover:bg-slate-900/10'
+              : 'border-slate-200 dark:border-slate-800 hover:border-primary/50 hover:bg-slate-50/30 dark:hover:bg-slate-900/10'
             }`}
         >
-          <div className="p-3 bg-indigo-50 dark:bg-indigo-950/40 text-primary rounded-full">
-            <UploadCloud className="w-6 h-6" />
+          <div className="p-2 bg-indigo-50 dark:bg-indigo-950/40 text-primary rounded-[8px] shrink-0">
+            <UploadCloud className="w-4 h-4" />
           </div>
-          <div className="flex flex-col gap-1">
-            <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+          <div className="flex-1 min-w-0 flex flex-col items-start text-left">
+            <span className="text-xs font-bold text-slate-700 dark:text-slate-200 truncate w-full">
               {label}
             </span>
-            <span className="text-xs text-slate-400 dark:text-slate-500">
+            <span className="text-[10px] text-slate-400 dark:text-slate-500 truncate w-full">
               {sublabel}
             </span>
           </div>
-          <span className="text-xs px-2.5 py-1 rounded bg-slate-100 dark:bg-slate-900 text-slate-500 dark:text-slate-400 font-medium">
-            Max file size {maxSizeMB}MB
+          <span className="text-[10px] px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 font-bold shrink-0">
+            Max {maxSizeMB}MB
           </span>
         </motion.div>
       ) : (

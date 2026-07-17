@@ -30,6 +30,20 @@ export const registerUser = createAsyncThunk(
   }
 );
 
+export const socialLogin = createAsyncThunk(
+  'auth/socialLogin',
+  async (socialData, { rejectWithValue }) => {
+    try {
+      const response = await api.post('/auth/social-login', socialData);
+      localStorage.setItem('token', response.data.token);
+      localStorage.setItem('user', JSON.stringify(response.data.user));
+      return response.data;
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.error || 'Social login failed');
+    }
+  }
+);
+
 export const fetchProfile = createAsyncThunk(
   'auth/fetchProfile',
   async (_, { rejectWithValue }) => {
@@ -123,6 +137,22 @@ const authSlice = createSlice({
       state.token = action.payload.token;
     });
     builder.addCase(registerUser.rejected, (state, action) => {
+      state.isLoading = false;
+      state.error = action.payload;
+    });
+
+    // Social Login
+    builder.addCase(socialLogin.pending, (state) => {
+      state.isLoading = true;
+      state.error = null;
+    });
+    builder.addCase(socialLogin.fulfilled, (state, action) => {
+      state.isLoading = false;
+      state.isAuthenticated = true;
+      state.user = action.payload.user;
+      state.token = action.payload.token;
+    });
+    builder.addCase(socialLogin.rejected, (state, action) => {
       state.isLoading = false;
       state.error = action.payload;
     });

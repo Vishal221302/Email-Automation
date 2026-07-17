@@ -10,12 +10,15 @@ import TemplateEditor from '../pages/TemplateEditor';
 import BulkEmail from '../pages/BulkEmail';
 import ScheduledEmails from '../pages/ScheduledEmails';
 import SentEmails from '../pages/SentEmails';
+import FailedEmails from '../pages/FailedEmails';
+import Inbox from '../pages/Inbox';
 import ConnectedAccounts from '../pages/ConnectedAccounts';
 import Analytics from '../pages/Analytics';
 import Notifications from '../pages/Notifications';
 import Profile from '../pages/Profile';
 import Settings from '../pages/Settings';
 import Login from '../pages/Login';
+import LoginSuccess from '../pages/LoginSuccess';
 import Button from '../components/ui/Button';
 
 // Route Protection Wrapper (Only accessible to logged-in users)
@@ -69,6 +72,7 @@ const AppRoutes = () => {
     <Routes>
       {/* Login Endpoint */}
       <Route path="/login" element={<AnimatedRoute><PublicRoute><Login /></PublicRoute></AnimatedRoute>} />
+      <Route path="/login-success" element={<LoginSuccess />} />
 
       {/* Protected Dashboard Views */}
       <Route
@@ -90,11 +94,11 @@ const AppRoutes = () => {
         {/* Email Pipelines */}
         <Route path="/bulk" element={<AnimatedRoute><BulkEmail /></AnimatedRoute>} />
         <Route path="/scheduled" element={<AnimatedRoute><ScheduledEmails /></AnimatedRoute>} />
+        <Route path="/inbox" element={<AnimatedRoute><Inbox /></AnimatedRoute>} />
         
         {/* Sent archives mapped to same base table with path checking */}
         <Route path="/sent" element={<AnimatedRoute><SentEmails /></AnimatedRoute>} />
-        <Route path="/failed" element={<AnimatedRoute><SentEmails /></AnimatedRoute>} />
-        <Route path="/history" element={<AnimatedRoute><SentEmails /></AnimatedRoute>} />
+        <Route path="/failed" element={<AnimatedRoute><FailedEmails /></AnimatedRoute>} />
         
         {/* Integrity connections and analytics */}
         <Route path="/accounts" element={<AnimatedRoute><ConnectedAccounts /></AnimatedRoute>} />

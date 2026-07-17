@@ -43,6 +43,14 @@ const ConnectedAccount = sequelize.define('ConnectedAccount', {
     type: DataTypes.TEXT,
     allowNull: true
   },
+  displayName: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  profilePicture: {
+    type: DataTypes.TEXT,
+    allowNull: true
+  },
   userId: {
     type: DataTypes.UUID,
     allowNull: false,

@@ -88,7 +88,19 @@ const TemplateEditor = () => {
 
   const handleFileAttach = (file) => {
     if (file) {
-      setUploadedFiles((prev) => [...prev, { name: file.name, size: `${(file.size / 1024).toFixed(0)} KB` }]);
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const base64Data = e.target.result.split(',')[1]; // Strip the data:...;base64, prefix
+        setUploadedFiles(prev => [...prev, {
+          name: file.name,
+          size: `${(file.size / 1024).toFixed(0)} KB`,
+          mimeType: file.type || 'application/octet-stream',
+          data: base64Data
+        }]);
+        toast.success('Attachment Added', `Attached ${file.name} to template.`);
+      };
+      reader.onerror = () => toast.error('Read Error', `Failed to read ${file.name}`);
+      reader.readAsDataURL(file);
     }
   };
 

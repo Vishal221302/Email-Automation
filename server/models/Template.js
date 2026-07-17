@@ -25,8 +25,7 @@ const Template = sequelize.define('Template', {
     allowNull: false
   },
   attachments: {
-    type: DataTypes.TEXT, // Store as stringified JSON array
-    defaultValue: '[]',
+    type: DataTypes.TEXT('long'), // Store as stringified JSON array (LONGTEXT to support large base64 attachments)
     get() {
       const rawValue = this.getDataValue('attachments');
       return rawValue ? JSON.parse(rawValue) : [];

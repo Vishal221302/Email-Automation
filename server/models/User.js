@@ -21,7 +21,15 @@ const User = sequelize.define('User', {
   },
   password: {
     type: DataTypes.STRING,
-    allowNull: false
+    allowNull: true
+  },
+  provider: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  avatar: {
+    type: DataTypes.TEXT,
+    allowNull: true
   },
   timezone: {
     type: DataTypes.STRING,

@@ -191,9 +191,18 @@ const ConnectedAccounts = () => {
 
             <div className="flex flex-col gap-4">
               <div className="flex items-start justify-between gap-2">
-                <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-indigo-500 to-cyan-500 flex items-center justify-center text-white font-extrabold shadow-sm ring-2 ring-slate-100 dark:ring-slate-800">
-                  {acc.email[0].toUpperCase()}
-                </div>
+                {acc.profilePicture ? (
+                  <img
+                    src={acc.profilePicture}
+                    alt="profile"
+                    className="w-10 h-10 rounded-full object-cover shadow-sm ring-2 ring-slate-100 dark:ring-slate-800"
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-indigo-500 to-cyan-500 flex items-center justify-center text-white font-extrabold shadow-sm ring-2 ring-slate-100 dark:ring-slate-800">
+                    {acc.email[0].toUpperCase()}
+                  </div>
+                )}
                 
                 <div className="flex flex-col items-end gap-1.5">
                   <Badge variant={acc.status === 'connected' ? 'success' : acc.status === 'pending_auth' ? 'warning' : 'danger'} pulse={acc.status === 'connected'}>
@@ -208,10 +217,15 @@ const ConnectedAccounts = () => {
               </div>
 
               <div className="flex flex-col gap-0.5">
-                <span className="text-sm font-bold text-slate-800 dark:text-slate-150 truncate leading-tight">
+                {acc.displayName && (
+                  <span className="text-base font-black text-slate-800 dark:text-slate-150 leading-none mb-1">
+                    {acc.displayName}
+                  </span>
+                )}
+                <span className="text-sm font-bold text-slate-650 dark:text-slate-350 truncate leading-tight">
                   {acc.email}
                 </span>
-                <span className="text-xs text-slate-400 font-semibold flex items-center gap-1">
+                <span className="text-xs text-slate-400 font-semibold flex items-center gap-1 mt-0.5">
                   <Link2 className="w-3.5 h-3.5" />
                   Integration Type: {acc.connectionType}
                 </span>

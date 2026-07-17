@@ -132,7 +132,8 @@ router.get('/oauth/auth-url', async (req, res) => {
       scope: [
         'https://www.googleapis.com/auth/gmail.send',
         'https://www.googleapis.com/auth/gmail.readonly',
-        'https://www.googleapis.com/auth/userinfo.email'
+        'https://www.googleapis.com/auth/userinfo.email',
+        'https://www.googleapis.com/auth/userinfo.profile'
       ],
       // Pass token and accountId securely through the state query
       state: `${token}:${accountId}`,
@@ -191,10 +192,14 @@ router.get('/oauth/callback', async (req, res) => {
     const oauth2 = google.oauth2({ version: 'v2', auth: oauth2Client });
     const userInfo = await oauth2.userinfo.get();
     const gmailAddress = userInfo.data.email;
+    const gmailName = userInfo.data.name;
+    const gmailPicture = userInfo.data.picture;
 
     // Update account status and credentials
     await account.update({
       email: gmailAddress,
+      displayName: gmailName || null,
+      profilePicture: gmailPicture || null,
       refreshToken: tokens.refresh_token || account.refreshToken, // Google only returns refresh_token on initial consent
       status: 'connected',
       lastSync: new Date()
@@ -296,6 +301,242 @@ router.get('/inbox/:id', authMiddleware, async (req, res) => {
   }
 });
 
+// 5b. Sync/Get Gmail Sent Messages (Dynamic Google API + Mock Fallback)
+router.get('/sent/:id', authMiddleware, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const account = await ConnectedAccount.findOne({
+      where: { id, userId: req.userId }
+    });
+    if (!account) {
+      return res.status(404).json({ error: 'Connected account not found' });
+    }
+
+    // Mock Fallback: If no refresh token exists (demo account), return mock sent emails
+    if (!account.refreshToken) {
+      const mockSent = [
+        {
+          id: 'mock_sent_1',
+          from: account.email,
+          to: 'hiring@stripe.com',
+          subject: 'Application - Senior React Developer',
+          date: new Date(Date.now() - 3600000).toLocaleString(),
+          snippet: 'Hi Stripe Recruiting, Please find my application attached for the Senior React role...',
+          body: '<p>Hi Stripe Recruiting,</p><p>I am highly interested in the Senior React Developer role at Stripe. I have attached my resume and projects dashboard for your reference.</p><p>Best regards,<br>Vishal Patel</p>'
+        },
+        {
+          id: 'mock_sent_2',
+          from: account.email,
+          to: 'recruiting@airbnb.com',
+          subject: 'Outreach - Vishal Patel - Staff Engineer application',
+          date: new Date(Date.now() - 86400000).toLocaleString(),
+          snippet: 'Hi Airbnb Careers, I am excited to apply for the Staff Frontend Engineer position...',
+          body: '<p>Hi Airbnb Careers,</p><p>I am excited to apply for the Staff Frontend Engineer position. Looking forward to your response.</p><p>Best,<br>Vishal Patel</p>'
+        }
+      ];
+      return res.json(mockSent);
+    }
+
+    // Initialize OAuth2 client using custom user keys
+    const oauth2Client = new google.auth.OAuth2(
+      account.clientId,
+      account.clientSecret,
+      REDIRECT_URI
+    );
+
+    oauth2Client.setCredentials({
+      refresh_token: account.refreshToken
+    });
+
+    const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+    
+    // List latest 50 messages in Gmail Sent
+    const listRes = await gmail.users.messages.list({
+      userId: 'me',
+      q: 'label:SENT',
+      maxResults: 50
+    });
+
+    const messages = listRes.data.messages || [];
+
+    // Fetch individual email bodies in parallel for fast loading
+    const emailPromises = messages.map(async (msg) => {
+      try {
+        const msgRes = await gmail.users.messages.get({
+          userId: 'me',
+          id: msg.id
+        });
+        return parseGmailMessage(msgRes.data);
+      } catch (e) {
+        console.error(`Failed to parse Gmail sent message ${msg.id}:`, e.message);
+        return null;
+      }
+    });
+
+    const resolvedEmails = await Promise.all(emailPromises);
+    const emails = resolvedEmails.filter(e => e !== null);
+
+    res.json(emails);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 5b-2. Sync/Get Gmail Bounce & Failure Messages (Dynamic Google API + Mock Fallback)
+router.get('/bounces/:id', authMiddleware, async (req, res) => {
+  const { id } = req.params;
+  try {
+    const account = await ConnectedAccount.findOne({
+      where: { id, userId: req.userId }
+    });
+    if (!account) {
+      return res.status(404).json({ error: 'Connected account not found' });
+    }
+
+    // Mock Fallback: If no refresh token exists (demo account), return mock bounce emails
+    if (!account.refreshToken) {
+      const mockBounces = [
+        {
+          id: 'mock_bounce_1',
+          from: 'Mail Delivery Subsystem <mailer-daemon@googlemail.com>',
+          to: account.email,
+          subject: 'Delivery Status Notification (Failure)',
+          date: new Date(Date.now() - 3600000).toLocaleString(),
+          snippet: 'Address not found: Your message wasn\'t delivered to hiring@airbnb.com because...',
+          body: '<div style="font-family: sans-serif; padding: 20px; border: 1px solid #ddd; border-radius: 8px;"><h3>Address not found</h3><p>Your message wasn\'t delivered to <strong>hiring@airbnb.com</strong> because the address couldn\'t be found, or is unable to receive mail.</p></div>'
+        },
+        {
+          id: 'mock_bounce_2',
+          from: 'Mail Delivery Subsystem <mailer-daemon@googlemail.com>',
+          to: account.email,
+          subject: 'Delivery Status Notification (Failure)',
+          date: new Date(Date.now() - 7200000).toLocaleString(),
+          snippet: 'Address not found: Your message wasn\'t delivered to careers@figma.com because...',
+          body: '<div style="font-family: sans-serif; padding: 20px; border: 1px solid #ddd; border-radius: 8px;"><h3>Address not found</h3><p>Your message wasn\'t delivered to <strong>careers@figma.com</strong> because the address couldn\'t be found, or is unable to receive mail.</p></div>'
+        }
+      ];
+      return res.json(mockBounces);
+    }
+
+    // Initialize OAuth2 client using custom user keys
+    const oauth2Client = new google.auth.OAuth2(
+      account.clientId,
+      account.clientSecret,
+      REDIRECT_URI
+    );
+
+    oauth2Client.setCredentials({
+      refresh_token: account.refreshToken
+    });
+
+    const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+    
+    // List latest messages matching bounce queries
+    const listRes = await gmail.users.messages.list({
+      userId: 'me',
+      q: 'from:mailer-daemon OR subject:"Delivery Status Notification" OR "undelivered" OR "bounced"',
+      maxResults: 30
+    });
+
+    const messages = listRes.data.messages || [];
+
+    // Fetch individual email bodies in parallel
+    const emailPromises = messages.map(async (msg) => {
+      try {
+        const msgRes = await gmail.users.messages.get({
+          userId: 'me',
+          id: msg.id
+        });
+        return parseGmailMessage(msgRes.data);
+      } catch (e) {
+        console.error(`Failed to parse Gmail bounce message ${msg.id}:`, e.message);
+        return null;
+      }
+    });
+
+    const resolvedEmails = await Promise.all(emailPromises);
+    const emails = resolvedEmails.filter(e => e !== null);
+
+    res.json(emails);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 5c. Poll for NEW inbox emails since last check (for real-time notifications)
+// Client sends: { lastHistoryId } — server returns new messages + updated historyId
+router.post('/check-new-emails/:id', authMiddleware, async (req, res) => {
+  const { id } = req.params;
+  const { lastHistoryId } = req.body;
+
+  try {
+    const account = await ConnectedAccount.findOne({
+      where: { id, userId: req.userId }
+    });
+    if (!account) return res.status(404).json({ error: 'Account not found' });
+    if (!account.refreshToken) return res.json({ newEmails: [], historyId: null });
+
+    const oauth2Client = new google.auth.OAuth2(
+      account.clientId,
+      account.clientSecret,
+      REDIRECT_URI
+    );
+    oauth2Client.setCredentials({ refresh_token: account.refreshToken });
+
+    const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+
+    // Get current profile historyId
+    const profile = await gmail.users.getProfile({ userId: 'me' });
+    const currentHistoryId = profile.data.historyId;
+
+    // First call — no previous historyId, just return current historyId as baseline
+    if (!lastHistoryId) {
+      return res.json({ newEmails: [], historyId: currentHistoryId });
+    }
+
+    // Use Gmail history API to fetch changes since last historyId
+    let newMessages = [];
+    try {
+      const historyRes = await gmail.users.history.list({
+        userId: 'me',
+        startHistoryId: lastHistoryId,
+        historyTypes: ['messageAdded'],
+        labelId: 'INBOX'
+      });
+
+      const historyItems = historyRes.data.history || [];
+      const messageIds = new Set();
+
+      historyItems.forEach(item => {
+        (item.messagesAdded || []).forEach(ma => {
+          if (ma.message && ma.message.labelIds && ma.message.labelIds.includes('INBOX')) {
+            messageIds.add(ma.message.id);
+          }
+        });
+      });
+
+      // Fetch full details for new messages
+      const fetchPromises = Array.from(messageIds).map(async (msgId) => {
+        try {
+          const msgRes = await gmail.users.messages.get({ userId: 'me', id: msgId });
+          return parseGmailMessage(msgRes.data);
+        } catch (e) {
+          return null;
+        }
+      });
+
+      newMessages = (await Promise.all(fetchPromises)).filter(m => m !== null);
+    } catch (historyErr) {
+      // historyId too old — return empty, client will reset
+      return res.json({ newEmails: [], historyId: currentHistoryId, reset: true });
+    }
+
+    res.json({ newEmails: newMessages, historyId: currentHistoryId });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Set Primary Account
 router.post('/primary/:id', authMiddleware, async (req, res) => {
   const { id } = req.params;
@@ -319,7 +560,7 @@ router.post('/primary/:id', authMiddleware, async (req, res) => {
   }
 });
 
-// Refresh / Verify Status
+// Refresh / Verify Status (includes name & profile picture sync)
 router.post('/refresh/:id', authMiddleware, async (req, res) => {
   const { id } = req.params;
   try {
@@ -330,9 +571,32 @@ router.post('/refresh/:id', authMiddleware, async (req, res) => {
       return res.status(404).json({ error: 'Account not found' });
     }
 
-    // Refresh synchronization timestamps
+    let displayName = account.displayName;
+    let profilePicture = account.profilePicture;
+
+    if (account.refreshToken && account.clientId && account.clientSecret) {
+      try {
+        const oauth2Client = new google.auth.OAuth2(
+          account.clientId,
+          account.clientSecret,
+          REDIRECT_URI
+        );
+        oauth2Client.setCredentials({ refresh_token: account.refreshToken });
+        const oauth2 = google.oauth2({ version: 'v2', auth: oauth2Client });
+        const userInfo = await oauth2.userinfo.get();
+        
+        displayName = userInfo.data.name || displayName;
+        profilePicture = userInfo.data.picture || profilePicture;
+      } catch (oauthErr) {
+        console.warn('OAuth refresh profile sync failed:', oauthErr.message);
+      }
+    }
+
+    // Refresh synchronization timestamps and profile details
     await account.update({
       status: account.refreshToken ? 'connected' : 'pending_auth',
+      displayName,
+      profilePicture,
       lastSync: new Date()
     });
 

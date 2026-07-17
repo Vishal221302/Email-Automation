@@ -14,7 +14,9 @@ import {
   CheckCircle,
   XCircle,
   AlertTriangle,
-  Info
+  Info,
+  BellOff,
+  BellRing
 } from 'lucide-react';
 import { toggleTheme } from '../redux/slices/settingsSlice';
 import { markAsRead, markAllRead, removeNotification } from '../redux/slices/notificationsSlice';
@@ -31,6 +33,42 @@ const Navbar = ({ setIsMobileOpen }) => {
 
   const [isNtfOpen, setIsNtfOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+
+  // Track browser notification permission state
+  const [notifPermission, setNotifPermission] = useState(
+    typeof window !== 'undefined' && 'Notification' in window
+      ? Notification.permission
+      : 'denied'
+  );
+
+  // Must be called from a user click — browsers block programmatic permission requests
+  const handleEnableNotifications = async () => {
+    if (!('Notification' in window)) return;
+    const result = await Notification.requestPermission();
+    setNotifPermission(result);
+    if (result === 'granted') {
+      // Play a quick test chime so user knows sound works
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(880, ctx.currentTime);
+        gain.gain.setValueAtTime(0, ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.3, ctx.currentTime + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 0.35);
+      } catch (_) {}
+      new Notification('MailFlow Pro', {
+        body: 'Notifications enabled! You will be alerted on new emails.',
+        icon: '/vite.svg',
+        silent: true
+      });
+    }
+  };
 
   // Compute display name and initials from logged-in user
   const displayName = user?.name || user?.username || 'User';
@@ -97,6 +135,18 @@ const Navbar = ({ setIsMobileOpen }) => {
         >
           Compose Email
         </Button>
+
+        {/* Notification Permission Button — shown only when not yet granted */}
+        {notifPermission !== 'granted' && (
+          <button
+            onClick={handleEnableNotifications}
+            title="Click to enable real-time email notifications"
+            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-[10px] text-xs font-bold bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition-colors cursor-pointer"
+          >
+            <BellRing className="w-3.5 h-3.5" />
+            Enable Alerts
+          </button>
+        )}
 
         {/* Theme Toggle */}
         <button

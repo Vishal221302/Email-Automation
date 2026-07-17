@@ -10,7 +10,6 @@ import {
   CalendarClock,
   Send,
   MailX,
-  History,
   KeyRound,
   LineChart,
   Bell,
@@ -19,7 +18,8 @@ import {
   LogOut,
   ChevronLeft,
   ChevronRight,
-  Sparkles
+  Sparkles,
+  Inbox
 } from 'lucide-react';
 import { useToast } from './ui/Toast';
 import { logout } from '../redux/slices/authSlice';
@@ -57,6 +57,7 @@ const Sidebar = ({ isCollapsed, setIsCollapsed, isMobileOpen, setIsMobileOpen })
       badge: pendingCount > 0 ? pendingCount : null,
       badgeColor: 'bg-indigo-500'
     },
+    { name: 'Inbox', icon: Inbox, path: '/inbox' },
     { name: 'Sent Emails', icon: Send, path: '/sent' },
     {
       name: 'Failed Emails',
@@ -65,7 +66,6 @@ const Sidebar = ({ isCollapsed, setIsCollapsed, isMobileOpen, setIsMobileOpen })
       badge: failedCount > 0 ? failedCount : null,
       badgeColor: 'bg-danger'
     },
-    { name: 'Email History', icon: History, path: '/history' },
     { name: 'Connected Accounts', icon: KeyRound, path: '/accounts' },
     { name: 'Analytics', icon: LineChart, path: '/analytics' },
     {
