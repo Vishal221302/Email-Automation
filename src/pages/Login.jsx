@@ -280,21 +280,6 @@ const Login = () => {
                 <div className="w-full border-t border-slate-100 dark:border-slate-805" />
               </div>
               
-              {/* Account 1: Vishal Patel */}
-              <div
-                onClick={() => handleSocialSelect('Patel Vishal', 'vishal@gmail.com', 'https://api.dicebear.com/7.x/avataaars/svg?seed=Vishal')}
-                className="flex items-center gap-3 p-3 rounded-[12px] border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900 bg-white dark:bg-slate-950/20 cursor-pointer transition-colors"
-              >
-                <div className="w-9 h-9 rounded-full bg-indigo-50 dark:bg-slate-900 overflow-hidden flex items-center justify-center shadow-sm">
-                  <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Vishal" alt="avatar" className="w-full h-full object-cover" />
-                </div>
-                <div className="flex-1 flex flex-col min-w-0">
-                  <span className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">Patel Vishal</span>
-                  <span className="text-[10px] text-slate-400 dark:text-slate-500 truncate">vishal@gmail.com</span>
-                </div>
-                <Badge variant="success" className="text-[9px] uppercase">Premium</Badge>
-              </div>
-
               {/* Account 2: Test Account */}
               <div
                 onClick={() => handleSocialSelect('Test User', 'test@gmail.com', 'https://api.dicebear.com/7.x/avataaars/svg?seed=Test')}
