@@ -195,7 +195,7 @@ const Login = () => {
               {/* Google login Button */}
               <button
                 type="button"
-                onClick={() => { window.location.href = 'http://localhost:5000/api/auth/google'; }}
+                onClick={() => { window.location.href = 'https://email-automation-backend-dl1c.onrender.com/api/auth/google'; }}
                 className="flex items-center justify-center gap-2.5 py-2.5 px-4 rounded-[12px] border border-slate-200 dark:border-slate-800 hover:border-slate-350 dark:hover:border-slate-700 bg-slate-50/50 dark:bg-slate-900/20 text-xs font-bold text-slate-700 dark:text-slate-250 cursor-pointer transition-colors"
               >
                 <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
@@ -210,7 +210,7 @@ const Login = () => {
               {/* Facebook Login Button */}
               <button
                 type="button"
-                onClick={() => { window.location.href = 'http://localhost:5000/api/auth/facebook'; }}
+                onClick={() => { window.location.href = 'https://email-automation-backend-dl1c.onrender.com/api/auth/facebook'; }}
                 className="flex items-center justify-center gap-2.5 py-2.5 px-4 rounded-[12px] border border-slate-200 dark:border-slate-800 hover:border-slate-350 dark:hover:border-slate-700 bg-slate-50/50 dark:bg-slate-900/20 text-xs font-bold text-slate-700 dark:text-slate-250 cursor-pointer transition-colors"
               >
                 <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
@@ -266,7 +266,7 @@ const Login = () => {
               <button
                 type="button"
                 onClick={() => {
-                  window.location.href = `http://localhost:5000/api/auth/${socialModalType}`;
+                  window.location.href = `https://email-automation-backend-dl1c.onrender.com/api/auth/${socialModalType}`;
                 }}
                 className="flex items-center justify-center gap-2 py-2.5 px-4 rounded-[12px] bg-primary text-white text-xs font-black shadow-md shadow-primary/20 hover:bg-indigo-400 transition-colors cursor-pointer"
               >

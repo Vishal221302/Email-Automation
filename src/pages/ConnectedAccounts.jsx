@@ -48,7 +48,7 @@ const ConnectedAccounts = () => {
   // Loading indicator for syncing
   const [syncingId, setSyncingId] = useState(null);
 
-  const REDIRECT_URI = 'http://localhost:5000/api/accounts/oauth/callback';
+  const REDIRECT_URI = 'https://email-automation-backend-dl1c.onrender.com/api/accounts/oauth/callback';
 
   // Ref flag to ensure OAuth callback toast fires exactly once per page load
   const oauthHandled = useRef(false);
@@ -111,7 +111,7 @@ const ConnectedAccounts = () => {
         toast.info('Authorizing', 'Redirecting to Google Sign-In consent page...');
         const token = localStorage.getItem('token');
         // Redirect browser to authorize dynamic keys
-        window.location.href = `http://localhost:5000/api/accounts/oauth/auth-url?accountId=${actionResult.id}&token=${token}`;
+        window.location.href = `https://email-automation-backend-dl1c.onrender.com/api/accounts/oauth/auth-url?accountId=${actionResult.id}&token=${token}`;
       } else {
         dispatch(addNotification({
           type: 'success',
@@ -282,7 +282,7 @@ const ConnectedAccounts = () => {
                     className="px-2.5 py-1.5 text-xs flex-1 animate-pulse"
                     onClick={() => {
                       const token = localStorage.getItem('token');
-                      window.location.href = `http://localhost:5000/api/accounts/oauth/auth-url?accountId=${acc.id}&token=${token}`;
+                      window.location.href = `https://email-automation-backend-dl1c.onrender.com/api/accounts/oauth/auth-url?accountId=${acc.id}&token=${token}`;
                     }}
                     icon={Sparkles}
                   >
