@@ -123,6 +123,15 @@ const SentEmails = () => {
       }
     },
     {
+      key: 'fromAccount',
+      header: 'Sender (From)',
+      render: (row) => (
+        <span className="text-xs text-slate-600 dark:text-slate-400 font-bold truncate max-w-[180px] block">
+          {row.fromAccount}
+        </span>
+      )
+    },
+    {
       key: 'subject',
       header: 'Subject / Preview',
       render: (row) => (
