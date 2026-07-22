@@ -43,6 +43,7 @@ const ComposeEmail = () => {
   const [showCcBcc, setShowCcBcc] = useState(false);
   const [isScheduleEnabled, setIsScheduleEnabled] = useState(false);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [isSendingModalOpen, setIsSendingModalOpen] = useState(false);
   
   // Custom scheduling states
   const [schedDate, setSchedDate] = useState('');
@@ -210,10 +211,11 @@ const ComposeEmail = () => {
         attachments: uploadedFiles
       };
 
-      const toastId = toast.info('Sending Email', 'Dispatching email outreach...');
+      setIsSendingModalOpen(true);
 
       dispatch(sendEmailNow(payload)).unwrap()
         .then(() => {
+          setIsSendingModalOpen(false);
           toast.success('Email Sent', `Delivered successfully to ${data.to}.`);
           dispatch(addNotification({
             type: 'success',
@@ -237,6 +239,7 @@ const ComposeEmail = () => {
           setUploadedFiles([]);
         })
         .catch((err) => {
+          setIsSendingModalOpen(false);
           console.error('SMTP dispatch error:', err);
           toast.error('Sending Failed', err || 'Unknown SMTP error occurred.');
         });
@@ -556,6 +559,28 @@ const ComposeEmail = () => {
             >
               {isScheduleEnabled ? 'Approve & Schedule' : 'Approve & Send Now'}
             </Button>
+          </div>
+        </div>
+      </Modal>
+      {/* Sending Progress Loader Modal */}
+      <Modal
+        isOpen={isSendingModalOpen}
+        onClose={() => {}}
+        title=""
+        size="xs"
+      >
+        <div className="flex flex-col items-center justify-center p-8 gap-4 text-center">
+          <div className="relative flex items-center justify-center">
+            <div className="absolute w-16 h-16 rounded-full bg-primary/10 animate-ping" />
+            <div className="w-12 h-12 rounded-full border-4 border-indigo-100 border-t-primary animate-spin" />
+          </div>
+          <div className="flex flex-col gap-1.5 mt-2">
+            <span className="text-sm font-bold text-slate-800 dark:text-slate-100">
+              Sending Email...
+            </span>
+            <span className="text-xs text-slate-400 font-semibold leading-relaxed">
+              Connecting to secure SMTP relay and dispatching outbox payload. Please wait.
+            </span>
           </div>
         </div>
       </Modal>
