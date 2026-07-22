@@ -9,7 +9,7 @@ import {
   Calendar,
   ArrowUpRight,
   Database,
-  Chrome
+  Globe
 } from 'lucide-react';
 import Card from '../components/ui/Card';
 import Table from '../components/ui/Table';
@@ -325,7 +325,7 @@ const SentEmails = () => {
               : 'text-slate-450 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
           }`}
         >
-          <Chrome className="w-3.5 h-3.5" />
+          <Globe className="w-3.5 h-3.5" />
           Gmail Live Sync
         </button>
       </div>
