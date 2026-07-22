@@ -259,7 +259,7 @@ const Navbar = ({ setIsMobileOpen }) => {
               onClick={() => navigate('/notifications')}
               className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
             >
-              View all in inbox
+              View all notifications
             </button>
           </div>
 
