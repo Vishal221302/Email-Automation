@@ -65,7 +65,7 @@ const ComposeEmail = () => {
     jobTitle: ''
   };
 
-  const { register, handleSubmit, control, watch, setValue, formState: { errors } } = useForm({
+  const { register, handleSubmit, control, watch, setValue, reset, formState: { errors } } = useForm({
     defaultValues
   });
 
@@ -210,16 +210,36 @@ const ComposeEmail = () => {
         attachments: uploadedFiles
       };
 
-      dispatch(sendEmailNow(payload));
+      const toastId = toast.info('Sending Email', 'Dispatching email outreach...');
 
-      dispatch(addNotification({
-        type: 'success',
-        title: 'Application Dispatched',
-        message: `Your job application to ${data.companyName || data.to} was sent successfully.`
-      }));
+      dispatch(sendEmailNow(payload)).unwrap()
+        .then(() => {
+          toast.success('Email Sent', `Delivered successfully to ${data.to}.`);
+          dispatch(addNotification({
+            type: 'success',
+            title: 'Application Dispatched',
+            message: `Your job application to ${data.companyName || data.to} was sent successfully.`
+          }));
 
-      toast.success('Email Sent', `Delivered successfully to ${data.to}.`);
-      navigate('/sent');
+          // Reset fields on success
+          reset({
+            fromAccount: data.fromAccount,
+            to: '',
+            cc: '',
+            bcc: '',
+            subject: '',
+            body: '',
+            templateId: '',
+            candidateName: '',
+            companyName: '',
+            jobTitle: ''
+          });
+          setUploadedFiles([]);
+        })
+        .catch((err) => {
+          console.error('SMTP dispatch error:', err);
+          toast.error('Sending Failed', err || 'Unknown SMTP error occurred.');
+        });
     }
   };
 

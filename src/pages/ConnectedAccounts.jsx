@@ -7,8 +7,8 @@ import {
   Trash2,
   Star,
   Link2,
-  AlertCircle,
-  ShieldCheck
+  ShieldCheck,
+  Edit
 } from 'lucide-react';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
@@ -24,6 +24,7 @@ import {
   syncAccount
 } from '../redux/slices/accountsSlice';
 import { addNotification } from '../redux/slices/notificationsSlice';
+import api from '../services/api';
 
 const ConnectedAccounts = () => {
   const dispatch = useDispatch();
@@ -37,6 +38,17 @@ const ConnectedAccounts = () => {
   const [clientId, setClientId] = useState('smtp.gmail.com'); // Repurposed for SMTP Host
   const [clientSecret, setClientSecret] = useState('');       // Repurposed for SMTP Password
   const [smtpPort, setSmtpPort] = useState('465');            // Repurposed for SMTP Port
+
+  // Edit State
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editEmail, setEditEmail] = useState('');
+  const [editHost, setEditHost] = useState('');
+  const [editPassword, setEditPassword] = useState('');
+  const [editPort, setEditPort] = useState('465');
+  const [editingAccountId, setEditingAccountId] = useState('');
+
+  // Password visibility
+  const [showPassword, setShowPassword] = useState(false);
 
   // Loading indicator for syncing
   const [syncingId, setSyncingId] = useState(null);
@@ -81,6 +93,7 @@ const ConnectedAccounts = () => {
       setClientId('smtp.gmail.com');
       setClientSecret('');
       setSmtpPort('465');
+      setShowPassword(false);
     } catch (err) {
       toast.error('Connection Failed', err || 'Failed to save account credentials.');
     }
@@ -118,6 +131,37 @@ const ConnectedAccounts = () => {
     }
   };
 
+  const handleEditClick = (acc) => {
+    setEditingAccountId(acc.id);
+    setEditEmail(acc.email);
+    setEditHost(acc.clientId || 'smtp.gmail.com');
+    setEditPassword(acc.clientSecret || '');
+    setEditPort(acc.refreshToken || '465');
+    setShowPassword(false);
+    setIsEditOpen(true);
+  };
+
+  const handleEditSubmit = async (e) => {
+    e.preventDefault();
+    if (!editHost || !editPassword) {
+      toast.error('Validation Error', 'SMTP Host Address and App Password are required.');
+      return;
+    }
+
+    try {
+      await api.put(`/accounts/${editingAccountId}`, {
+        clientId: editHost,
+        clientSecret: editPassword,
+        refreshToken: editPort
+      });
+      toast.success('SMTP Updated', 'Your SMTP connection credentials have been updated.');
+      setIsEditOpen(false);
+      dispatch(fetchAccounts());
+    } catch (err) {
+      toast.error('Update Failed', err.response?.data?.error || 'Failed to update credentials.');
+    }
+  };
+
   return (
     <div className="flex flex-col gap-6 text-left">
       {/* Title */}
@@ -133,7 +177,7 @@ const ConnectedAccounts = () => {
         <Button
           variant="primary"
           size="sm"
-          onClick={() => setIsConnectOpen(true)}
+          onClick={() => { setShowPassword(false); setIsConnectOpen(true); }}
           icon={Plus}
         >
           Connect New Account
@@ -173,7 +217,7 @@ const ConnectedAccounts = () => {
               </div>
 
               <div className="flex flex-col gap-0.5">
-                <span className="text-sm font-bold text-slate-655 dark:text-slate-350 truncate leading-tight">
+                <span className="text-sm font-bold text-slate-650 dark:text-slate-350 truncate leading-tight">
                   {acc.email}
                 </span>
                 <span className="text-xs text-slate-400 font-semibold flex items-center gap-1 mt-0.5">
@@ -206,6 +250,17 @@ const ConnectedAccounts = () => {
                   Verify
                 </Button>
 
+                {/* Edit */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="px-2.5 py-1.5 text-xs flex-1"
+                  onClick={() => handleEditClick(acc)}
+                  icon={Edit}
+                >
+                  Edit
+                </Button>
+
                 {/* Primary Setting */}
                 {!acc.isPrimary && (
                   <Button
@@ -222,7 +277,7 @@ const ConnectedAccounts = () => {
                 {/* Disconnect */}
                 <button
                   onClick={() => handleDisconnect(acc.id, acc.email)}
-                  className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-750 text-slate-400 hover:text-danger hover:bg-danger/5 transition-colors cursor-pointer"
+                  className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-755 text-slate-400 hover:text-danger hover:bg-danger/5 transition-colors cursor-pointer"
                   title="Disconnect account credentials"
                 >
                   <Trash2 className="w-4.5 h-4.5" />
@@ -275,7 +330,7 @@ const ConnectedAccounts = () => {
             />
 
             <div className="flex flex-col gap-1.5 text-left">
-              <label className="text-xs font-semibold text-slate-550 dark:text-slate-400 uppercase tracking-wider">
+              <label className="text-xs font-semibold text-slate-555 dark:text-slate-400 uppercase tracking-wider">
                 SMTP Port Protocol
               </label>
               <select
@@ -289,14 +344,23 @@ const ConnectedAccounts = () => {
               </select>
             </div>
 
-            <Input
-              label="SMTP App Password"
-              placeholder="Enter App Password (usually 16 characters)"
-              value={clientSecret}
-              onChange={(e) => setClientSecret(e.target.value)}
-              required
-              type="password"
-            />
+            <div className="relative">
+              <Input
+                label="SMTP App Password"
+                placeholder="Enter App Password (usually 16 characters)"
+                value={clientSecret}
+                onChange={(e) => setClientSecret(e.target.value)}
+                required
+                type={showPassword ? "text" : "password"}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3.5 top-9 text-xs font-bold text-primary hover:text-indigo-400 cursor-pointer bg-transparent border-none focus:outline-none"
+              >
+                {showPassword ? "Hide" : "Show"}
+              </button>
+            </div>
           </div>
 
           <div className="flex items-center justify-end gap-3.5 border-t border-slate-100 dark:border-slate-750 pt-4 mt-2">
@@ -305,6 +369,81 @@ const ConnectedAccounts = () => {
             </Button>
             <Button variant="primary" type="submit" size="sm" icon={Plus}>
               Save Connection
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Edit Account Dialog Modal */}
+      <Modal
+        isOpen={isEditOpen}
+        onClose={() => setIsEditOpen(false)}
+        title="Edit SMTP Connection"
+        size="md"
+      >
+        <form onSubmit={handleEditSubmit} className="flex flex-col gap-4 text-left">
+          <p className="text-xs text-slate-500 leading-relaxed">
+            Update your SMTP Host, Port, and secure App Password for this sending account.
+          </p>
+
+          <Input
+            label="Sender Email Address"
+            value={editEmail}
+            disabled={true}
+            required
+            icon={KeyRound}
+          />
+
+          <div className="flex flex-col gap-3.5 bg-slate-50 dark:bg-slate-950 p-4 rounded-[16px] border border-slate-200/60 dark:border-slate-800/80">
+            <Input
+              label="SMTP Host Address"
+              placeholder="e.g. smtp.gmail.com"
+              value={editHost}
+              onChange={(e) => setEditHost(e.target.value)}
+              required
+              type="text"
+            />
+
+            <div className="flex flex-col gap-1.5 text-left">
+              <label className="text-xs font-semibold text-slate-550 dark:text-slate-400 uppercase tracking-wider">
+                SMTP Port Protocol
+              </label>
+              <select
+                value={editPort}
+                onChange={(e) => setEditPort(e.target.value)}
+                className="w-full py-2.5 px-3 rounded-[12px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 text-slate-700 dark:text-slate-200 font-bold"
+              >
+                <option value="465">465 (SSL/TLS - Secure)</option>
+                <option value="587">587 (STARTTLS)</option>
+                <option value="25">25 (Non-Secure)</option>
+              </select>
+            </div>
+
+            <div className="relative">
+              <Input
+                label="SMTP App Password"
+                placeholder="Enter App Password (usually 16 characters)"
+                value={editPassword}
+                onChange={(e) => setEditPassword(e.target.value)}
+                required
+                type={showPassword ? "text" : "password"}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3.5 top-9 text-xs font-bold text-primary hover:text-indigo-400 cursor-pointer bg-transparent border-none focus:outline-none"
+              >
+                {showPassword ? "Hide" : "Show"}
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end gap-3.5 border-t border-slate-100 dark:border-slate-750 pt-4 mt-2">
+            <Button variant="outline" size="sm" onClick={() => setIsEditOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="primary" type="submit" size="sm" icon={Plus}>
+              Save Changes
             </Button>
           </div>
         </form>
