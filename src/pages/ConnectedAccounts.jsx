@@ -43,7 +43,20 @@ const ConnectedAccounts = () => {
   const [connectionType, setConnectionType] = useState('Gmail OAuth');
   const [clientId, setClientId] = useState('');
   const [clientSecret, setClientSecret] = useState('');
+  const [smtpPort, setSmtpPort] = useState('465');
   const [copied, setCopied] = useState(false);
+
+  // Set default values when connectionType changes
+  useEffect(() => {
+    if (connectionType === 'SMTP App Password') {
+      setClientId('smtp.gmail.com');
+      setSmtpPort('465');
+      setClientSecret('');
+    } else {
+      setClientId('');
+      setClientSecret('');
+    }
+  }, [connectionType]);
 
   // Loading indicator for syncing
   const [syncingId, setSyncingId] = useState(null);
@@ -97,14 +110,20 @@ const ConnectedAccounts = () => {
         toast.error('Validation Error', 'Google Client ID and Client Secret are required for Gmail OAuth.');
         return;
       }
+    } else if (connectionType === 'SMTP App Password') {
+      if (!clientId || !clientSecret) {
+        toast.error('Validation Error', 'SMTP Host and App Password are required.');
+        return;
+      }
     }
 
     try {
       const actionResult = await dispatch(connectAccount({
         email: newEmail,
         connectionType,
-        clientId: connectionType === 'Gmail OAuth' ? clientId : null,
-        clientSecret: connectionType === 'Gmail OAuth' ? clientSecret : null
+        clientId, // SMTP Host for SMTP connection
+        clientSecret, // App Password for SMTP connection
+        refreshToken: connectionType === 'SMTP App Password' ? smtpPort : null
       })).unwrap();
 
       if (connectionType === 'Gmail OAuth') {
@@ -116,13 +135,14 @@ const ConnectedAccounts = () => {
         dispatch(addNotification({
           type: 'success',
           title: 'Account Connected',
-          message: `Account ${newEmail} connected successfully via App Password.`
+          message: `Account ${newEmail} connected successfully via SMTP App Password.`
         }));
-        toast.success('Connection Success', `Credentials linked for ${newEmail}.`);
+        toast.success('Connection Success', `SMTP credentials linked for ${newEmail}.`);
         setIsConnectOpen(false);
         setNewEmail('');
         setClientId('');
         setClientSecret('');
+        setSmtpPort('465');
       }
     } catch (err) {
       toast.error('Connection Failed', err || 'Failed to save account credentials.');
@@ -275,7 +295,7 @@ const ConnectedAccounts = () => {
                 )}
 
                 {/* Authorize/Renew */}
-                {acc.status === 'pending_auth' && (
+                {acc.status === 'pending_auth' && acc.connectionType === 'Gmail OAuth' && (
                   <Button
                     variant="primary"
                     size="sm"
@@ -335,7 +355,7 @@ const ConnectedAccounts = () => {
               className="w-full py-2.5 px-3 rounded-[12px] bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 text-slate-700 dark:text-slate-200 font-medium"
             >
               <option value="Gmail OAuth">Gmail OAuth 2.0 Client (Official)</option>
-              <option value="SMTP App Password">Mock Simulation Account</option>
+              <option value="SMTP App Password">SMTP App Password (Real Email Outbox)</option>
             </select>
           </div>
 
@@ -376,6 +396,53 @@ const ConnectedAccounts = () => {
               <Input
                 label="Google Client Secret"
                 placeholder="Paste client secret from Google Cloud Console"
+                value={clientSecret}
+                onChange={(e) => setClientSecret(e.target.value)}
+                required
+                type="password"
+              />
+            </div>
+          )}
+
+          {connectionType === 'SMTP App Password' && (
+            <div className="flex flex-col gap-3.5 bg-slate-50 dark:bg-slate-950 p-4 rounded-[16px] border border-slate-200/60 dark:border-slate-800/80">
+              <div className="flex items-start gap-2.5">
+                <AlertCircle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-xs font-bold text-slate-700 dark:text-slate-200">SMTP Connection Credentials</span>
+                  <span className="text-[11px] text-slate-400 dark:text-slate-400 leading-normal">
+                    Provide the SMTP Host (e.g. smtp.gmail.com), select the port, and enter your secure App Password.
+                  </span>
+                </div>
+              </div>
+
+              <Input
+                label="SMTP Host Address"
+                placeholder="e.g. smtp.gmail.com"
+                value={clientId}
+                onChange={(e) => setClientId(e.target.value)}
+                required
+                type="text"
+              />
+
+              <div className="flex flex-col gap-1.5 text-left">
+                <label className="text-xs font-semibold text-slate-500 dark:text-slate-450 uppercase tracking-wider">
+                  SMTP Port Protocol
+                </label>
+                <select
+                  value={smtpPort}
+                  onChange={(e) => setSmtpPort(e.target.value)}
+                  className="w-full py-2.5 px-3 rounded-[12px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 text-slate-700 dark:text-slate-200"
+                >
+                  <option value="465">465 (SSL/TLS - Secure)</option>
+                  <option value="587">587 (STARTTLS)</option>
+                  <option value="25">25 (Non-Secure)</option>
+                </select>
+              </div>
+
+              <Input
+                label="SMTP App Password"
+                placeholder="Enter App Password (usually 16 characters)"
                 value={clientSecret}
                 onChange={(e) => setClientSecret(e.target.value)}
                 required
