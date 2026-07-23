@@ -48,7 +48,13 @@ const Email = sequelize.define('Email', {
     type: DataTypes.TEXT('long'), // Store as JSON string array (LONGTEXT to support large base64 attachments)
     get() {
       const rawValue = this.getDataValue('attachments');
-      return rawValue ? JSON.parse(rawValue) : [];
+      if (!rawValue) return [];
+      try {
+        return JSON.parse(rawValue);
+      } catch (err) {
+        console.error('[Email Model] Failed to parse attachments JSON:', err.message);
+        return [];
+      }
     },
     set(val) {
       this.setDataValue('attachments', JSON.stringify(val || []));

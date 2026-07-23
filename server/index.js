@@ -67,8 +67,15 @@ app.get('/', (req, res) => {
 
 // Database Sync and Server Listen
 sequelize.sync()
-  .then(() => {
+  .then(async () => {
     console.log('✔ MySQL Database Models Synchronized successfully.');
+    // Ensure attachment columns are LONGTEXT in MySQL to prevent truncation of base64 attachments
+    try {
+      await sequelize.query('ALTER TABLE emails MODIFY COLUMN attachments LONGTEXT;');
+      await sequelize.query('ALTER TABLE scheduledemails MODIFY COLUMN attachments LONGTEXT;');
+    } catch (alterErr) {
+      // Ignore if table/column alter is not permitted or already done
+    }
     app.listen(PORT, () => {
       console.log(`✔ Secure Server listening on port ${PORT}`);
     });
