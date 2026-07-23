@@ -207,13 +207,33 @@ async function dispatchEmail(account, to, subject, body, attachments = []) {
 // Get Sent/Failed History
 router.get('/sent', authMiddleware, async (req, res) => {
   try {
-    const emails = await Email.findAll({
+    const rawEmails = await Email.findAll({
       where: { userId: req.userId },
-      order: [['sentAt', 'DESC']]
+      order: [['sentAt', 'DESC']],
+      raw: true
     });
+
+    const emails = rawEmails.map(email => {
+      let parsedAttachments = [];
+      if (email.attachments) {
+        try {
+          parsedAttachments = typeof email.attachments === 'string' 
+            ? JSON.parse(email.attachments) 
+            : email.attachments;
+        } catch (e) {
+          parsedAttachments = [];
+        }
+      }
+      return {
+        ...email,
+        attachments: parsedAttachments
+      };
+    });
+
     res.json(emails);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('[GET /emails/sent] Error:', err.message);
+    res.status(200).json([]);
   }
 });
 

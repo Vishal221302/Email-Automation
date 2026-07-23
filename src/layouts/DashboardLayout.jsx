@@ -5,7 +5,7 @@ import Sidebar from '../components/Sidebar';
 import Navbar from '../components/Navbar';
 import { fetchAccounts } from '../redux/slices/accountsSlice';
 import { fetchTemplates } from '../redux/slices/templatesSlice';
-import { fetchSentEmails, fetchScheduledEmails } from '../redux/slices/emailsSlice';
+import { fetchScheduledEmails } from '../redux/slices/emailsSlice';
 
 const DashboardLayout = () => {
   const dispatch = useDispatch();
@@ -23,12 +23,11 @@ const DashboardLayout = () => {
     }
   }, [theme]);
 
-  // Fetch all user records from database on login/mount
+  // Fetch accounts and templates on login/mount
   useEffect(() => {
     if (isAuthenticated) {
       dispatch(fetchAccounts());
       dispatch(fetchTemplates());
-      dispatch(fetchSentEmails());
       dispatch(fetchScheduledEmails());
     }
   }, [isAuthenticated, dispatch]);
