@@ -2,7 +2,7 @@ import axios from 'axios';
 import { logout } from '../redux/slices/authSlice';
 
 const api = axios.create({
-  baseURL:'https://email-automation-backend-dl1c.onrender.com/api' || import.meta.env.VITE_API_BASE_URL,
+  baseURL:import.meta.env.VITE_API_BASE_URL ||'https://email-automation-backend-dl1c.onrender.com/api',
   headers: {
     'Content-Type': 'application/json'
   }

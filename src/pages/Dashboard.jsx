@@ -44,6 +44,13 @@ const Dashboard = () => {
   const { sentEmails, scheduledEmails } = useSelector((state) => state.emails);
   const { accounts } = useSelector((state) => state.accounts);
   const { templates } = useSelector((state) => state.templates);
+  const [now, setNow] = useState(Date.now());
+
+  // Update live countdown timer every second
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Force reload database stats on mount
   useEffect(() => {
@@ -52,6 +59,22 @@ const Dashboard = () => {
     dispatch(fetchSentEmails());
     dispatch(fetchScheduledEmails());
   }, [dispatch]);
+
+  const formatCountdown = (targetISO, nowTime, status) => {
+    if (status !== 'pending') return null;
+    const diff = new Date(targetISO).getTime() - nowTime;
+    if (diff <= 0) return 'Sending now...';
+    const seconds = Math.floor((diff / 1000) % 60);
+    const minutes = Math.floor((diff / (1000 * 60)) % 60);
+    const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    const parts = [];
+    if (days > 0) parts.push(`${days}d`);
+    if (hours > 0 || days > 0) parts.push(`${hours}h`);
+    if (minutes > 0 || hours > 0 || days > 0) parts.push(`${minutes}m`);
+    parts.push(`${seconds}s`);
+    return `Sends in ${parts.join(' ')}`;
+  };
 
   // Dynamic calculations from Redux State
   const totalSentCount = sentEmails.filter(e => e.status === 'sent').length;
@@ -366,10 +389,10 @@ const Dashboard = () => {
                       {item.subject}
                     </span>
                   </div>
-                  <div className="flex flex-col items-end gap-1.5 shrink-0">
+                  <div className="flex flex-col items-end gap-1 shrink-0">
                     <Badge variant={item.status === 'paused' ? 'warning' : 'primary'} className="rounded">
-                      <Clock className="w-3 h-3 inline mr-1" />
-                      {item.status === 'paused' ? 'Paused' : 'Pending'}
+                      <Clock className="w-3 h-3 inline mr-1 animate-spin" style={{ animationDuration: '4s' }} />
+                      {item.status === 'paused' ? 'Paused' : (formatCountdown(item.scheduledAt, now, item.status) || 'Pending')}
                     </Badge>
                     <span className="text-[10px] text-slate-400 font-semibold">
                       {new Date(item.scheduledAt).toLocaleDateString()} at{' '}

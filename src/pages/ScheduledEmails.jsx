@@ -38,6 +38,13 @@ const ScheduledEmails = () => {
   const toast = useToast();
   
   const { scheduledEmails } = useSelector((state) => state.emails);
+  const [now, setNow] = useState(Date.now());
+
+  // Update live countdown timer every second
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Poll scheduled list every 10 seconds to keep UI synced with backend automatic scheduler
   useEffect(() => {
@@ -112,6 +119,31 @@ const ScheduledEmails = () => {
     setEditingEmail(null);
   };
 
+  const formatCountdown = (targetISO, nowTime, status) => {
+    if (status !== 'pending') return null;
+    const diff = new Date(targetISO).getTime() - nowTime;
+    
+    if (diff <= 0) {
+      return { label: 'Sending now...', isDue: true };
+    }
+
+    const seconds = Math.floor((diff / 1000) % 60);
+    const minutes = Math.floor((diff / (1000 * 60)) % 60);
+    const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+
+    const parts = [];
+    if (days > 0) parts.push(`${days}d`);
+    if (hours > 0 || days > 0) parts.push(`${hours}h`);
+    if (minutes > 0 || hours > 0 || days > 0) parts.push(`${minutes}m`);
+    parts.push(`${seconds}s`);
+
+    return {
+      label: `Sends in ${parts.join(' ')}`,
+      isDue: false
+    };
+  };
+
   // Filter items
   const filteredEmails = scheduledEmails.filter((item) => {
     if (filterStatus === 'All') return true;
@@ -179,13 +211,23 @@ const ScheduledEmails = () => {
     },
     {
       key: 'scheduledAt',
-      header: 'Delivery Target',
+      header: 'Delivery Target / Countdown',
       render: (row) => {
         const date = new Date(row.scheduledAt);
+        const countdown = formatCountdown(row.scheduledAt, now, row.status);
         return (
-          <div className="flex flex-col text-xs font-semibold text-slate-500">
-            <span>{date.toLocaleDateString()} at {date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-            <span className="text-[10px] text-slate-400 uppercase tracking-widest">{row.timezone}</span>
+          <div className="flex flex-col text-xs font-semibold">
+            <span className="text-slate-700 dark:text-slate-300">
+              {date.toLocaleDateString()} at {date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </span>
+            {countdown ? (
+              <span className={`text-[11px] font-extrabold mt-0.5 flex items-center gap-1.5 ${countdown.isDue ? 'text-amber-500 animate-pulse' : 'text-indigo-600 dark:text-indigo-400'}`}>
+                <Clock className="w-3.5 h-3.5 animate-spin" style={{ animationDuration: '4s' }} />
+                {countdown.label}
+              </span>
+            ) : (
+              <span className="text-[10px] text-slate-400 uppercase tracking-widest">{row.timezone}</span>
+            )}
           </div>
         );
       }

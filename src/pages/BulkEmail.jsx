@@ -13,11 +13,16 @@ import {
   Users,
   Settings,
   Sparkles,
-  Download
+  Download,
+  Clock,
+  Send,
+  Calendar,
+  XCircle
 } from 'lucide-react';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import Badge from '../components/ui/Badge';
+import Modal from '../components/ui/Modal';
 import FileUpload from '../components/ui/FileUpload';
 import { useToast } from '../components/ui/Toast';
 import {
@@ -27,7 +32,7 @@ import {
   completeSending,
   resetBulkState
 } from '../redux/slices/bulkSlice';
-import { sendEmailNow } from '../redux/slices/emailsSlice';
+import { sendEmailNow, scheduleEmail } from '../redux/slices/emailsSlice';
 import { addNotification } from '../redux/slices/notificationsSlice';
 
 const BulkEmail = () => {
@@ -44,6 +49,21 @@ const BulkEmail = () => {
   const [activeStep, setActiveStep] = useState(1); // 1: Upload, 2: Validate, 3: Configure & Run
   const [selectedTemplateId, setSelectedTemplateId] = useState('');
   const [senderAccount, setSenderAccount] = useState(accounts[0]?.email || '');
+
+  // Scheduling states
+  const [isScheduleEnabled, setIsScheduleEnabled] = useState(false);
+  const [schedDate, setSchedDate] = useState('');
+  const [schedTime, setSchedTime] = useState('');
+  const [schedTimezone, setSchedTimezone] = useState('Asia/Kolkata');
+
+  // Real-Time Sending Progress Popup Modal States
+  const [isProgressModalOpen, setIsProgressModalOpen] = useState(false);
+  const [currentSendingIndex, setCurrentSendingIndex] = useState(0);
+  const [totalSendingCount, setTotalSendingCount] = useState(0);
+  const [currentSendingEmail, setCurrentSendingEmail] = useState('');
+  const [sentSuccessCount, setSentSuccessCount] = useState(0);
+  const [sentFailedCount, setSentFailedCount] = useState(0);
+  const [isSendingFinished, setIsSendingFinished] = useState(false);
 
   // Auto-sync sender account when accounts load from Redux store
   useEffect(() => {
@@ -71,16 +91,6 @@ const BulkEmail = () => {
     toast.success('Download Success', 'Sample CSV template downloaded successfully.');
   };
 
-  // Mock candidates to load if the user uploads a CSV
-  const dummyCSVRows = [
-    { email: 'hiring@airbnb.com', candidate_name: 'Alex Harrison', company_name: 'Airbnb', job_title: 'Staff UI Engineer' },
-    { email: 'careers@figma.com', candidate_name: 'Alex Harrison', company_name: 'Figma', job_title: 'Product Engineer' },
-    { email: 'recruiting@stripe.com', candidate_name: 'Alex Harrison', company_name: 'Stripe', job_title: 'Frontend Lead' },
-    { email: 'jobs@uber.com', candidate_name: 'Alex Harrison', company_name: 'Uber', job_title: 'Senior React Developer' },
-    { email: 'invalid-email-address', candidate_name: 'Alex Harrison', company_name: 'Unknown LLC', job_title: 'Developer' }, // Invalid email
-    { email: 'hr@vercel.com', candidate_name: '', company_name: 'Vercel', job_title: 'Vite Maintainer' } // Missing name
-  ];
-
   const handleCSVUpload = (file) => {
     if (file) {
       const reader = new FileReader();
@@ -92,10 +102,8 @@ const BulkEmail = () => {
           return;
         }
 
-        // Parse headers (first line)
         const headers = rows[0].split(',').map(h => h.trim().replace(/^["']|["']$/g, '').toLowerCase());
         
-        // Find header indexes (flexible names support)
         const emailIdx = headers.indexOf('email');
         const nameIdx = headers.findIndex(h => h.includes('name') || h === 'candidate_name');
         const companyIdx = headers.findIndex(h => h.includes('company') || h === 'company_name');
@@ -108,19 +116,17 @@ const BulkEmail = () => {
 
         const parsedCandidates = [];
 
-        // Parse remaining data lines
         for (let i = 1; i < rows.length; i++) {
           const rowText = rows[i].trim();
           if (!rowText) continue;
 
-          // Split columns while taking quotes into account
           const values = [];
           let currentVal = '';
           let insideQuotes = false;
           
           for (let charIdx = 0; charIdx < rowText.length; charIdx++) {
             const char = rowText[charIdx];
-            if (char === '"' || char === "'") {
+            if (char === '"') {
               insideQuotes = !insideQuotes;
             } else if (char === ',' && !insideQuotes) {
               values.push(currentVal.trim().replace(/^["']|["']$/g, ''));
@@ -131,98 +137,148 @@ const BulkEmail = () => {
           }
           values.push(currentVal.trim().replace(/^["']|["']$/g, ''));
 
-          if (values.length === 0 || (values.length === 1 && values[0] === '')) continue;
+          const emailVal = values[emailIdx] || '';
+          const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+          const isValid = emailRegex.test(emailVal);
 
           parsedCandidates.push({
-            email: values[emailIdx] || '',
-            candidate_name: nameIdx !== -1 ? values[nameIdx] || '' : '',
-            company_name: companyIdx !== -1 ? values[companyIdx] || '' : '',
-            job_title: titleIdx !== -1 ? values[titleIdx] || '' : ''
+            id: i,
+            email: emailVal,
+            candidate_name: nameIdx !== -1 ? values[nameIdx] || 'Applicant' : 'Applicant',
+            company_name: companyIdx !== -1 ? values[companyIdx] || 'Target Company' : 'Target Company',
+            job_title: titleIdx !== -1 ? values[titleIdx] || 'Open Position' : 'Open Position',
+            isValid,
+            error: !isValid ? 'Invalid email format' : null
           });
         }
 
-        if (parsedCandidates.length === 0) {
-          toast.error('Validation Error', 'No valid recipient records found in the CSV.');
-          return;
-        }
-
-        dispatch(setCSVData({ fileName: file.name, candidates: parsedCandidates }));
-        toast.success('CSV Parsed', `Loaded ${parsedCandidates.length} contacts from ${file.name}.`);
+        dispatch(setCSVData({
+          fileName: file.name,
+          candidates: parsedCandidates
+        }));
+        
+        toast.success('CSV Parsed', `Imported ${parsedCandidates.length} contacts from ${file.name}.`);
         setActiveStep(2);
       };
-      reader.onerror = () => {
-        toast.error('Read Error', 'Failed to read the selected CSV file.');
-      };
+      reader.onerror = () => toast.error('File Error', 'Failed to read the selected CSV file.');
       reader.readAsText(file);
     }
   };
 
-  const executeBulkDispatch = () => {
+  const handleLaunchCampaign = async () => {
     if (!selectedTemplateId) {
-      toast.error('Dispatch Configuration', 'Please select an outreach template before running.');
+      toast.error('Validation Error', 'Please select an email template to proceed.');
       return;
     }
 
     const selectedTemplate = templates.find((t) => t.id === selectedTemplateId);
     if (!selectedTemplate) return;
 
-    dispatch(startSending());
-    setActiveStep(3);
+    const validCandidates = candidates.filter((c) => c.isValid);
+    if (validCandidates.length === 0) {
+      toast.error('Validation Error', 'No valid candidate email addresses to dispatch.');
+      return;
+    }
 
-    // Simulate progress sending
-    let progress = 0;
-    const interval = setInterval(() => {
-      progress += 20;
-      dispatch(updateSendProgress(progress));
-
-      if (progress >= 100) {
-        clearInterval(interval);
-        dispatch(completeSending());
-        
-        // Dispatch only valid candidates
-        const validCandidates = candidates.filter((c) => c.isValid);
-        
-        validCandidates.forEach((candidate) => {
-          // Replace placeholders
-          const compiledSubject = selectedTemplate.subject
-            .replace(/{{candidate_name}}/g, candidate.candidate_name)
-            .replace(/{{company_name}}/g, candidate.company_name)
-            .replace(/{{job_title}}/g, candidate.job_title);
-
-          const compiledBody = selectedTemplate.body
-            .replace(/{{candidate_name}}/g, candidate.candidate_name)
-            .replace(/{{company_name}}/g, candidate.company_name)
-            .replace(/{{job_title}}/g, candidate.job_title);
-
-          dispatch(
-            sendEmailNow({
-              to: candidate.email,
-              candidateName: candidate.candidate_name,
-              companyName: candidate.company_name,
-              jobTitle: candidate.job_title,
-              subject: compiledSubject,
-              body: compiledBody,
-              fromAccount: senderAccount,
-              attachments: selectedTemplate.attachments
-            })
-          );
-        });
-
-        // Add Notification
-        dispatch(
-          addNotification({
-            type: 'success',
-            title: 'Bulk Dispatch Completed',
-            message: `Sent outbox run of ${validCandidates.length} personalized messages from ${senderAccount}.`
-          })
-        );
-
-        toast.success(
-          'Bulk Run Completed',
-          `Dispatched ${validCandidates.length} personalized emails successfully.`
-        );
+    if (isScheduleEnabled) {
+      if (!schedDate || !schedTime) {
+        toast.error('Schedule Error', 'Please select delivery date and time for bulk schedule.');
+        return;
       }
-    }, 600);
+      const scheduledDateTime = `${schedDate}T${schedTime}:00`;
+      const scheduledAt = new Date(scheduledDateTime).toISOString();
+
+      let count = 0;
+      for (const candidate of validCandidates) {
+        const compiledSubject = selectedTemplate.subject
+          .replace(/{{candidate_name}}/g, candidate.candidate_name)
+          .replace(/{{company_name}}/g, candidate.company_name)
+          .replace(/{{job_title}}/g, candidate.job_title);
+
+        const compiledBody = selectedTemplate.body
+          .replace(/{{candidate_name}}/g, candidate.candidate_name)
+          .replace(/{{company_name}}/g, candidate.company_name)
+          .replace(/{{job_title}}/g, candidate.job_title);
+
+        await dispatch(scheduleEmail({
+          to: candidate.email,
+          candidateName: candidate.candidate_name,
+          companyName: candidate.company_name,
+          jobTitle: candidate.job_title,
+          subject: compiledSubject,
+          body: compiledBody,
+          fromAccount: senderAccount,
+          attachments: selectedTemplate.attachments || [],
+          scheduledAt,
+          timezone: schedTimezone
+        }));
+        count++;
+      }
+
+      dispatch(addNotification({
+        type: 'info',
+        title: 'Bulk Campaign Scheduled',
+        message: `${count} emails scheduled for ${schedDate} at ${schedTime} (${schedTimezone}).`
+      }));
+
+      toast.success('Campaign Scheduled', `${count} bulk emails queued for ${schedDate} at ${schedTime}.`);
+      navigate('/scheduled');
+      return;
+    }
+
+    // Immediate Bulk Send with Real-Time Progress Modal
+    setIsProgressModalOpen(true);
+    setTotalSendingCount(validCandidates.length);
+    setCurrentSendingIndex(0);
+    setSentSuccessCount(0);
+    setSentFailedCount(0);
+    setIsSendingFinished(false);
+
+    let successCount = 0;
+    let failCount = 0;
+
+    for (let i = 0; i < validCandidates.length; i++) {
+      const candidate = validCandidates[i];
+      setCurrentSendingIndex(i + 1);
+      setCurrentSendingEmail(candidate.email);
+
+      const compiledSubject = selectedTemplate.subject
+        .replace(/{{candidate_name}}/g, candidate.candidate_name)
+        .replace(/{{company_name}}/g, candidate.company_name)
+        .replace(/{{job_title}}/g, candidate.job_title);
+
+      const compiledBody = selectedTemplate.body
+        .replace(/{{candidate_name}}/g, candidate.candidate_name)
+        .replace(/{{company_name}}/g, candidate.company_name)
+        .replace(/{{job_title}}/g, candidate.job_title);
+
+      try {
+        await dispatch(sendEmailNow({
+          to: candidate.email,
+          candidateName: candidate.candidate_name,
+          companyName: candidate.company_name,
+          jobTitle: candidate.job_title,
+          subject: compiledSubject,
+          body: compiledBody,
+          fromAccount: senderAccount,
+          attachments: selectedTemplate.attachments || []
+        })).unwrap();
+
+        successCount++;
+        setSentSuccessCount(successCount);
+      } catch (err) {
+        console.error(`Failed sending to ${candidate.email}:`, err);
+        failCount++;
+        setSentFailedCount(failCount);
+      }
+    }
+
+    setIsSendingFinished(true);
+    dispatch(addNotification({
+      type: 'success',
+      title: 'Bulk Dispatch Completed',
+      message: `Completed bulk run of ${validCandidates.length} emails: ${successCount} sent, ${failCount} failed.`
+    }));
   };
 
   const handleReset = () => {
@@ -259,274 +315,350 @@ const BulkEmail = () => {
         ].map((item) => (
           <div
             key={item.step}
-            className={`flex flex-col md:flex-row items-center gap-2.5 p-3 rounded-button transition-colors text-center md:text-left
-              ${activeStep === item.step ? 'bg-indigo-50/50 dark:bg-indigo-950/20 text-primary' : 'text-slate-400'}`}
+            onClick={() => {
+              if (item.step === 1 || (item.step === 2 && fileName) || (item.step === 3 && fileName)) {
+                setActiveStep(item.step);
+              }
+            }}
+            className={`flex items-center gap-3 p-3 rounded-lg transition-all cursor-pointer ${
+              activeStep === item.step
+                ? 'bg-slate-100 dark:bg-slate-800/80 ring-1 ring-slate-200 dark:ring-slate-700'
+                : 'opacity-60 hover:opacity-100'
+            }`}
           >
             <div
-              className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs shrink-0
-                ${
-                  activeStep === item.step
-                    ? 'bg-primary text-white'
-                    : activeStep > item.step
-                    ? 'bg-success text-white'
-                    : 'bg-slate-100 dark:bg-slate-850 text-slate-400'
-                }`}
+              className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${
+                activeStep === item.step
+                  ? 'bg-primary text-white'
+                  : item.step < activeStep
+                  ? 'bg-success text-white'
+                  : 'bg-slate-200 dark:bg-slate-800 text-slate-500'
+              }`}
             >
-              {activeStep > item.step ? '✓' : item.step}
+              {item.step < activeStep ? '✓' : item.step}
             </div>
-            <div className="flex flex-col">
-              <span className="text-xs font-bold leading-tight">{item.label}</span>
-              <span className="text-[10px] text-slate-400 hidden md:block">{item.desc}</span>
+            <div className="hidden sm:flex flex-col text-left">
+              <span className="text-xs font-bold text-slate-800 dark:text-slate-200">{item.label}</span>
+              <span className="text-[10px] text-slate-400">{item.desc}</span>
             </div>
           </div>
         ))}
       </div>
 
-      {/* Step Contents */}
-      <div className="flex flex-col gap-6">
-        {/* Step 1: Upload CSV */}
-        {activeStep === 1 && (
-          <Card className="p-8 text-center flex flex-col items-center justify-center gap-4">
-            <div className="p-4 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-500">
-              <Database className="w-8 h-8" />
-            </div>
-            <div className="max-w-md">
-              <h3 className="text-base font-bold text-slate-950 dark:text-white">Import Contacts & Recipients</h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
-                Import your CSV contact list. Use column headers: <code className="px-1 py-0.5 bg-slate-100 dark:bg-slate-800 text-[10px]">email</code>, <code className="px-1 py-0.5 bg-slate-100 dark:bg-slate-800 text-[10px]">candidate_name</code> (as name), <code className="px-1 py-0.5 bg-slate-100 dark:bg-slate-800 text-[10px]">company_name</code> (as company), and <code className="px-1 py-0.5 bg-slate-100 dark:bg-slate-800 text-[10px]">job_title</code> (as custom field/role).
+      {/* Step 1: Upload */}
+      {activeStep === 1 && (
+        <Card className="flex flex-col gap-6 text-left">
+          <div className="flex flex-col gap-1">
+            <h3 className="text-base font-bold text-slate-900 dark:text-white m-0">Upload Recipient Sheet</h3>
+            <p className="text-xs text-slate-400">
+              CSV file must contain an "email" column. Optional fields: candidate_name, company_name, job_title.
+            </p>
+          </div>
+
+          <FileUpload
+            accept=".csv"
+            onFileSelect={handleCSVUpload}
+            maxSizeMB={5}
+            hint="Upload CSV file with email addresses"
+          />
+
+          <div className="flex flex-wrap items-center justify-between gap-4 border-t border-slate-100 dark:border-slate-800/80 pt-4">
+            <Button variant="outline" size="sm" onClick={downloadSampleCSV} icon={Download}>
+              Download Sample CSV Template
+            </Button>
+          </div>
+        </Card>
+      )}
+
+      {/* Step 2: Validate */}
+      {activeStep === 2 && (
+        <Card className="flex flex-col gap-6 text-left">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800/80 pb-4">
+            <div className="flex flex-col">
+              <h3 className="text-base font-bold text-slate-900 dark:text-white m-0">Recipient Data Validation</h3>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Loaded <strong className="text-slate-700 dark:text-slate-200">{fileName}</strong> — {candidates.length} total rows
               </p>
-              <button
-                type="button"
-                onClick={downloadSampleCSV}
-                className="mt-3.5 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-primary hover:text-indigo-400 bg-primary/5 dark:bg-primary/10 hover:bg-primary/10 rounded-button cursor-pointer border border-primary/20 hover:border-primary/30 transition-all"
-              >
-                <Download className="w-3.5 h-3.5" />
-                Download Sample CSV
-              </button>
             </div>
-            <FileUpload
-              accept=".csv"
-              maxSizeMB={2}
-              label="Select campaign recipient spreadsheet (.csv)"
-              sublabel="Drop sheet or click to upload demo data"
-              onFileSelect={handleCSVUpload}
-              className="max-w-xl mt-2"
-            />
-          </Card>
-        )}
 
-        {/* Step 2: Validate Contacts Grid */}
-        {activeStep === 2 && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Contacts validation table */}
-            <Card className="lg:col-span-2 flex flex-col gap-4">
-              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800/80 pb-3">
-                <div>
-                  <h3 className="text-base font-bold text-slate-950 dark:text-white">Recipient Variable Validation</h3>
-                  <p className="text-xs text-slate-400">Total: {candidates.length} records parsed</p>
-                </div>
-                <div className="flex gap-2">
-                  <Badge variant="success">{validCount} Valid</Badge>
-                  <Badge variant="danger">{invalidCount} Invalid</Badge>
-                </div>
-              </div>
-
-              <div className="overflow-x-auto rounded-[12px] border border-slate-100 dark:border-slate-800">
-                <table className="w-full text-left border-collapse text-xs divide-y divide-slate-100 dark:divide-slate-800">
-                  <thead className="bg-slate-50 dark:bg-slate-900/10 font-semibold text-slate-500 uppercase tracking-wider">
-                    <tr>
-                      <th className="px-4 py-3">Email Address</th>
-                      <th className="px-4 py-3">Recipient Name</th>
-                      <th className="px-4 py-3">Company / Org</th>
-                      <th className="px-4 py-3">Role / Custom Field</th>
-                      <th className="px-4 py-3 text-right">Validation</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800 bg-transparent text-slate-600 dark:text-slate-300">
-                    {candidates.map((c, i) => (
-                      <tr key={i} className="hover:bg-slate-50/20 dark:hover:bg-slate-800/10">
-                        <td className="px-4 py-3 font-semibold truncate max-w-[150px]">{c.email}</td>
-                        <td className="px-4 py-3 font-medium truncate max-w-[120px]">{c.candidate_name || <span className="text-danger">Missing</span>}</td>
-                        <td className="px-4 py-3 font-medium truncate max-w-[100px]">{c.company_name}</td>
-                        <td className="px-4 py-3 font-medium truncate max-w-[120px]">{c.job_title}</td>
-                        <td className="px-4 py-3 text-right">
-                          <Badge variant={c.isValid ? 'success' : 'danger'}>
-                            {c.isValid ? 'Valid' : 'Field Error'}
-                          </Badge>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              <div className="flex items-center justify-between mt-3 border-t border-slate-100 dark:border-slate-800 pt-4">
-                <Button variant="outline" size="sm" onClick={() => setActiveStep(1)} icon={ArrowLeft}>
-                  Back to Upload
-                </Button>
-                <Button variant="primary" size="sm" onClick={() => setActiveStep(3)} disabled={validCount === 0}>
-                  Next: Configure Campaign <ArrowRight className="w-4 h-4 ml-2" />
-                </Button>
-              </div>
-            </Card>
-
-            {/* Field validations descriptions card */}
-            <div className="flex flex-col gap-5">
-              <Card className="flex flex-col gap-4 text-left">
-                <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-2">
-                  <AlertTriangle className="w-4.5 h-4.5 text-warning" />
-                  <h4 className="text-sm font-bold text-slate-950 dark:text-white">Validation Warnings</h4>
-                </div>
-                <p className="text-xs text-slate-400 leading-relaxed">
-                  Only rows labeled <span className="text-success font-bold">Valid</span> will be generated. Empty columns or syntactically incorrect emails are ignored automatically to prevent bouncing errors.
-                </p>
-                <div className="flex flex-col gap-2.5">
-                  <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded-[12px] border border-slate-200 dark:border-slate-800">
-                    <span className="text-[10px] font-bold text-danger uppercase tracking-wider block">Line 5 - email format</span>
-                    <span className="text-xs text-slate-400 mt-0.5 block">"invalid-email-address" must contain a valid domain extension.</span>
-                  </div>
-                  <div className="p-3 bg-slate-50 dark:bg-slate-900 rounded-[12px] border border-slate-200 dark:border-slate-800">
-                    <span className="text-[10px] font-bold text-danger uppercase tracking-wider block">Line 6 - name check</span>
-                    <span className="text-xs text-slate-400 mt-0.5 block">"candidate_name" is required for email personalization.</span>
-                  </div>
-                </div>
-              </Card>
+            <div className="flex items-center gap-3">
+              <Badge variant="success" className="px-3 py-1 text-xs">
+                <CheckCircle className="w-3.5 h-3.5 inline mr-1" />
+                {validCount} Valid
+              </Badge>
+              {invalidCount > 0 && (
+                <Badge variant="danger" className="px-3 py-1 text-xs">
+                  <AlertTriangle className="w-3.5 h-3.5 inline mr-1" />
+                  {invalidCount} Invalid
+                </Badge>
+              )}
             </div>
           </div>
-        )}
 
-        {/* Step 3: Run Campaign & Progress bar */}
-        {activeStep === 3 && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Configure and dispatch */}
-            <Card className="lg:col-span-2 flex flex-col gap-5">
-              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-                <div>
-                  <h3 className="text-base font-bold text-slate-950 dark:text-white">Campaign Configuration</h3>
-                  <p className="text-xs text-slate-400">Total valid dispatches: {validCount} items</p>
-                </div>
+          {/* Data Table Preview */}
+          <div className="max-h-[350px] overflow-y-auto border border-slate-100 dark:border-slate-800 rounded-[12px]">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 dark:bg-slate-900 text-slate-500 uppercase tracking-wider font-bold border-b border-slate-100 dark:border-slate-800 sticky top-0">
+                <tr>
+                  <th className="py-2.5 px-3">Status</th>
+                  <th className="py-2.5 px-3">Email Address</th>
+                  <th className="py-2.5 px-3">Candidate Name</th>
+                  <th className="py-2.5 px-3">Company</th>
+                  <th className="py-2.5 px-3">Job Title</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-semibold">
+                {candidates.map((c) => (
+                  <tr key={c.id} className={!c.isValid ? 'bg-danger/5' : 'hover:bg-slate-50/50 dark:hover:bg-slate-900/40'}>
+                    <td className="py-2.5 px-3">
+                      {c.isValid ? (
+                        <span className="text-success font-bold flex items-center gap-1">
+                          <CheckCircle className="w-3.5 h-3.5" /> Valid
+                        </span>
+                      ) : (
+                        <span className="text-danger font-bold flex items-center gap-1" title={c.error}>
+                          <AlertTriangle className="w-3.5 h-3.5" /> Invalid
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-2.5 px-3 text-slate-800 dark:text-slate-200">{c.email}</td>
+                    <td className="py-2.5 px-3 text-slate-500">{c.candidate_name}</td>
+                    <td className="py-2.5 px-3 text-slate-500">{c.company_name}</td>
+                    <td className="py-2.5 px-3 text-slate-500">{c.job_title}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-800 pt-4">
+            <Button variant="outline" size="sm" onClick={() => setActiveStep(1)} icon={ArrowLeft}>
+              Back to upload
+            </Button>
+            <Button variant="primary" size="sm" onClick={() => setActiveStep(3)} icon={ArrowRight}>
+              Continue to Configure ({validCount} Valid)
+            </Button>
+          </div>
+        </Card>
+      )}
+
+      {/* Step 3: Configure & Launch */}
+      {activeStep === 3 && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+          <Card className="lg:col-span-2 flex flex-col gap-6 text-left">
+            <div className="flex flex-col gap-1 border-b border-slate-100 dark:border-slate-800/80 pb-3">
+              <h3 className="text-base font-bold text-slate-900 dark:text-white m-0">Configure Outreach Run</h3>
+              <p className="text-xs text-slate-400">
+                Select sender account, template pattern, and optional delivery schedule for {validCount} valid recipients.
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-4">
+              {/* Sender Account */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                  Outbound Sender Account
+                </label>
+                <select
+                  value={senderAccount}
+                  onChange={(e) => setSenderAccount(e.target.value)}
+                  className="w-full py-2.5 px-3 rounded-[12px] bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-sm font-bold text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                >
+                  {accounts.map((acc) => (
+                    <option key={acc.id} value={acc.email}>
+                      {acc.email} {acc.isPrimary ? '(Primary Default)' : ''}
+                    </option>
+                  ))}
+                </select>
               </div>
 
-              {!isSending && sendProgress === 0 ? (
-                /* Pre-dispatch configure fields */
-                <div className="flex flex-col gap-4">
-                  {/* Select Sender Credentials */}
-                  <div className="flex flex-col gap-1.5 text-left">
-                    <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                      Select Sender Account
-                    </label>
-                    <select
-                      value={senderAccount}
-                      onChange={(e) => setSenderAccount(e.target.value)}
-                      className="w-full py-2 px-3 rounded-[12px] bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 text-slate-700 dark:text-slate-200 font-medium"
-                    >
-                      {accounts.map((a) => (
-                        <option key={a.id} value={a.email} disabled={a.status === 'expired'}>
-                          {a.email} {a.status === 'expired' ? '(OAuth Token Expired)' : ''}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+              {/* Template Selection */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                  Select Email Template
+                </label>
+                <select
+                  value={selectedTemplateId}
+                  onChange={(e) => setSelectedTemplateId(e.target.value)}
+                  className="w-full py-2.5 px-3 rounded-[12px] bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-sm font-bold text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                >
+                  <option value="">Select a template...</option>
+                  {templates.map((tpl) => (
+                    <option key={tpl.id} value={tpl.id}>
+                      {tpl.name} ({tpl.category})
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-                  {/* Select Outreach Template */}
-                  <div className="flex flex-col gap-1.5 text-left">
-                    <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                      Apply Email Template
-                    </label>
-                    <select
-                      value={selectedTemplateId}
-                      onChange={(e) => setSelectedTemplateId(e.target.value)}
-                      className="w-full py-2 px-3 rounded-[12px] bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 text-slate-700 dark:text-slate-200 font-medium"
-                    >
-                      <option value="">Select a template...</option>
-                      {templates.map((tpl) => (
-                        <option key={tpl.id} value={tpl.id}>
-                          {tpl.name} ({tpl.category})
-                        </option>
-                      ))}
-                    </select>
+              {/* Scheduling Controls */}
+              <div className="flex flex-col gap-3 p-4 rounded-[14px] bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Clock className="w-4 h-4 text-indigo-500" />
+                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                      Schedule Campaign for Later
+                    </span>
                   </div>
-
-                  <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-800 pt-5 mt-2">
-                    <Button variant="outline" size="sm" onClick={() => setActiveStep(2)} icon={ArrowLeft}>
-                      Back to validation
-                    </Button>
-                    <Button
-                      variant="success"
-                      size="sm"
-                      onClick={executeBulkDispatch}
-                      disabled={!selectedTemplateId || !senderAccount}
-                      icon={Play}
-                    >
-                      Start Bulk Campaign Now
-                    </Button>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsScheduleEnabled(!isScheduleEnabled)}
+                    className={`relative inline-flex h-5 w-10 items-center rounded-full transition-colors cursor-pointer ${
+                      isScheduleEnabled ? 'bg-primary' : 'bg-slate-200 dark:bg-slate-700'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                        isScheduleEnabled ? 'translate-x-5.5' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
                 </div>
-              ) : (
-                /* Dispatch progress view */
-                <div className="py-8 flex flex-col items-center justify-center gap-6 text-center">
-                  <div className="flex flex-col gap-1 max-w-sm">
-                    <h4 className="text-lg font-extrabold text-slate-900 dark:text-white animate-pulse">
-                      {sendProgress < 100 ? 'Personalizing & Dispatching...' : 'Dispatch Run Completed'}
-                    </h4>
-                    <p className="text-xs text-slate-400">
-                      Evaluating tokens and dispatching emails via Gmail API relay
-                    </p>
-                  </div>
 
-                  {/* Circular/Line progress */}
-                  <div className="w-full max-w-md flex flex-col gap-2">
-                    <div className="flex items-center justify-between text-xs font-bold text-slate-500">
-                      <span>Progress</span>
-                      <span>{sendProgress}%</span>
+                {isScheduleEnabled && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-200/60 dark:border-slate-800">
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase">Delivery Date</label>
+                      <input
+                        type="date"
+                        value={schedDate}
+                        onChange={(e) => setSchedDate(e.target.value)}
+                        className="py-2 px-3 rounded-[10px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold text-slate-700 dark:text-slate-200"
+                      />
                     </div>
-                    <div className="w-full bg-slate-100 dark:bg-slate-800 h-3 rounded-full overflow-hidden">
-                      <div
-                        className="bg-gradient-to-r from-primary to-secondary h-full rounded-full transition-all duration-300"
-                        style={{ width: `${sendProgress}%` }}
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase">Delivery Time</label>
+                      <input
+                        type="time"
+                        value={schedTime}
+                        onChange={(e) => setSchedTime(e.target.value)}
+                        className="py-2 px-3 rounded-[10px] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold text-slate-700 dark:text-slate-200"
                       />
                     </div>
                   </div>
+                )}
+              </div>
 
-                  {sendProgress === 100 && (
-                    <div className="flex flex-col gap-4">
-                      <div className="flex justify-center text-success">
-                        <CheckCircle className="w-12 h-12" />
-                      </div>
-                      <div className="flex flex-wrap gap-2.5 justify-center max-w-md">
-                        <Button variant="outline" size="sm" onClick={handleReset}>
-                          Run Another Campaign
-                        </Button>
-                        <Button variant="primary" size="sm" onClick={() => navigate('/sent')}>
-                          View Dispatched Mail
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </Card>
+              {/* Navigation Action */}
+              <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-800 pt-5 mt-2">
+                <Button variant="outline" size="sm" onClick={() => setActiveStep(2)} icon={ArrowLeft}>
+                  Back to validation
+                </Button>
+                <Button
+                  variant={isScheduleEnabled ? "primary" : "success"}
+                  size="sm"
+                  onClick={handleLaunchCampaign}
+                  disabled={!selectedTemplateId || !senderAccount}
+                  icon={isScheduleEnabled ? Calendar : Send}
+                >
+                  {isScheduleEnabled ? `Schedule Campaign (${validCount})` : `Start Bulk Campaign Now (${validCount})`}
+                </Button>
+              </div>
+            </div>
+          </Card>
 
-            {/* Campaign info guidance card */}
-            <div className="flex flex-col gap-5">
-              <Card className="flex flex-col gap-4 text-left">
-                <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-2">
-                  <Sparkles className="w-4.5 h-4.5 text-indigo-500" />
-                  <h4 className="text-sm font-bold text-slate-950 dark:text-white">Campaign Automation</h4>
-                </div>
-                <div className="flex flex-col gap-2.5 text-xs text-slate-500 dark:text-slate-400">
-                  <p>
-                    Each recipient's custom details (name, company, and role/field) are dynamically merged into your email template placeholders.
-                  </p>
-                  <p>
-                    We apply standard rate limits with built-in dispatch delays to protect your sender domain reputation.
-                  </p>
-                </div>
-              </Card>
+          {/* Guidance Sidebar Card */}
+          <Card className="flex flex-col gap-4 text-left">
+            <div className="flex items-center gap-2 border-b border-slate-100 dark:border-slate-800 pb-2">
+              <Sparkles className="w-4.5 h-4.5 text-indigo-500" />
+              <h4 className="text-sm font-bold text-slate-950 dark:text-white">Campaign Details</h4>
+            </div>
+            <div className="flex flex-col gap-3 text-xs text-slate-500 dark:text-slate-400">
+              <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
+                <span>Total Valid Recipients:</span>
+                <span className="font-bold text-slate-800 dark:text-slate-200">{validCount}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
+                <span>Invalid Records Skipped:</span>
+                <span className="font-bold text-rose-500">{invalidCount}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-100 dark:border-slate-800">
+                <span>Outbound Sender:</span>
+                <span className="font-bold text-slate-800 dark:text-slate-200 truncate max-w-[150px]">{senderAccount}</span>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* ── REAL-TIME BULK PROGRESS POPUP MODAL ── */}
+      <Modal
+        isOpen={isProgressModalOpen}
+        onClose={() => {
+          if (isSendingFinished) {
+            setIsProgressModalOpen(false);
+            handleReset();
+          }
+        }}
+        title={isSendingFinished ? "Bulk Campaign Completed" : "Dispatching Bulk Outreach..."}
+        size="sm"
+      >
+        <div className="flex flex-col gap-5 text-center p-2">
+          {/* Animated Spinner or Check Icon */}
+          <div className="flex items-center justify-center">
+            {isSendingFinished ? (
+              <div className="w-16 h-16 rounded-full bg-emerald-100 dark:bg-emerald-950/50 text-emerald-500 flex items-center justify-center shadow-lg">
+                <CheckCircle className="w-8 h-8" />
+              </div>
+            ) : (
+              <div className="relative flex items-center justify-center">
+                <div className="absolute w-16 h-16 rounded-full bg-primary/10 animate-ping" />
+                <div className="w-12 h-12 rounded-full border-4 border-indigo-100 border-t-primary animate-spin" />
+              </div>
+            )}
+          </div>
+
+          {/* Current Counter & Progress Bar */}
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-200">
+              <span>{isSendingFinished ? "All Processed" : `Sending ${currentSendingIndex} of ${totalSendingCount}`}</span>
+              <span className="text-primary">{Math.round(((currentSendingIndex || 0) / (totalSendingCount || 1)) * 100)}%</span>
+            </div>
+
+            {/* Progress Bar */}
+            <div className="w-full h-3 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-indigo-500 to-cyan-500 transition-all duration-300 rounded-full"
+                style={{ width: `${Math.round(((currentSendingIndex || 0) / (totalSendingCount || 1)) * 100)}%` }}
+              />
+            </div>
+
+            {!isSendingFinished && currentSendingEmail && (
+              <span className="text-xs text-slate-400 font-semibold truncate mt-1">
+                Recipient: <strong className="text-slate-600 dark:text-slate-300">{currentSendingEmail}</strong>
+              </span>
+            )}
+          </div>
+
+          {/* Live Sent / Failed Counters */}
+          <div className="grid grid-cols-2 gap-3 pt-2">
+            <div className="flex flex-col p-3 rounded-[12px] bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200/60 dark:border-emerald-900/40">
+              <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400">{sentSuccessCount}</span>
+              <span className="text-[10px] font-bold text-emerald-500 uppercase">Sent (Success)</span>
+            </div>
+            <div className="flex flex-col p-3 rounded-[12px] bg-rose-50 dark:bg-rose-950/30 border border-rose-200/60 dark:border-rose-900/40">
+              <span className="text-2xl font-black text-rose-600 dark:text-rose-400">{sentFailedCount}</span>
+              <span className="text-[10px] font-bold text-rose-500 uppercase">Failed</span>
             </div>
           </div>
-        )}
-      </div>
+
+          {/* Modal Close Button */}
+          {isSendingFinished && (
+            <Button
+              variant="primary"
+              size="md"
+              className="w-full mt-2"
+              onClick={() => {
+                setIsProgressModalOpen(false);
+                handleReset();
+                navigate('/sent');
+              }}
+            >
+              View Dispatched Campaign Logs
+            </Button>
+          )}
+        </div>
+      </Modal>
     </div>
   );
 };

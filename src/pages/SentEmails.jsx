@@ -24,10 +24,12 @@ const SentEmails = () => {
   const toast = useToast();
 
   const { sentEmails, isLoading: dbLoading } = useSelector((state) => state.emails);
+  const { accounts } = useSelector((state) => state.accounts);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedEmail, setSelectedEmail] = useState(null);
   const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'sent' | 'failed'
+  const [accountFilter, setAccountFilter] = useState('all'); // 'all' | sender email
 
   useEffect(() => {
     dispatch(fetchAccounts());
@@ -51,7 +53,11 @@ const SentEmails = () => {
     if (statusFilter !== 'all' && item.status !== statusFilter) {
       return false;
     }
-    // 2. Search Query Filter
+    // 2. Account Filter
+    if (accountFilter !== 'all' && item.fromAccount !== accountFilter) {
+      return false;
+    }
+    // 3. Search Query Filter
     const query = searchQuery.toLowerCase();
     return (
       (item.to || '').toLowerCase().includes(query) ||
@@ -193,38 +199,58 @@ const SentEmails = () => {
         </div>
       </div>
 
-      {/* Modern Filter controls */}
-      <div className="flex gap-1.5 bg-slate-100 dark:bg-slate-900 p-1.5 rounded-[16px] w-fit border border-slate-200/60 dark:border-slate-800/80">
-        <button
-          onClick={() => setStatusFilter('all')}
-          className={`px-4.5 py-2.5 rounded-[12px] text-xs font-black transition-all cursor-pointer ${
-            statusFilter === 'all'
-              ? 'bg-white dark:bg-slate-800 text-primary shadow-sm'
-              : 'text-slate-450 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
-          }`}
-        >
-          All Logs
-        </button>
-        <button
-          onClick={() => setStatusFilter('sent')}
-          className={`px-4.5 py-2.5 rounded-[12px] text-xs font-black transition-all cursor-pointer ${
-            statusFilter === 'sent'
-              ? 'bg-white dark:bg-slate-800 text-emerald-650 dark:text-emerald-400 shadow-sm'
-              : 'text-slate-450 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
-          }`}
-        >
-          Sent (Success)
-        </button>
-        <button
-          onClick={() => setStatusFilter('failed')}
-          className={`px-4.5 py-2.5 rounded-[12px] text-xs font-black transition-all cursor-pointer ${
-            statusFilter === 'failed'
-              ? 'bg-white dark:bg-slate-800 text-rose-650 dark:text-rose-455 shadow-sm'
-              : 'text-slate-450 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
-          }`}
-        >
-          Failed
-        </button>
+      {/* Modern Filter controls & Account Dropdown */}
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex gap-1.5 bg-slate-100 dark:bg-slate-900 p-1.5 rounded-[16px] w-fit border border-slate-200/60 dark:border-slate-800/80">
+          <button
+            onClick={() => setStatusFilter('all')}
+            className={`px-4.5 py-2.5 rounded-[12px] text-xs font-black transition-all cursor-pointer ${
+              statusFilter === 'all'
+                ? 'bg-white dark:bg-slate-800 text-primary shadow-sm'
+                : 'text-slate-450 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+            }`}
+          >
+            All Logs ({sentEmails.length})
+          </button>
+          <button
+            onClick={() => setStatusFilter('sent')}
+            className={`px-4.5 py-2.5 rounded-[12px] text-xs font-black transition-all cursor-pointer ${
+              statusFilter === 'sent'
+                ? 'bg-white dark:bg-slate-800 text-emerald-650 dark:text-emerald-400 shadow-sm'
+                : 'text-slate-450 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+            }`}
+          >
+            Sent (Success)
+          </button>
+          <button
+            onClick={() => setStatusFilter('failed')}
+            className={`px-4.5 py-2.5 rounded-[12px] text-xs font-black transition-all cursor-pointer ${
+              statusFilter === 'failed'
+                ? 'bg-white dark:bg-slate-800 text-rose-650 dark:text-rose-400 shadow-sm'
+                : 'text-slate-450 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+            }`}
+          >
+            Failed
+          </button>
+        </div>
+
+        {/* Sender Account Selector Dropdown */}
+        <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-900 p-1.5 px-3 rounded-[16px] border border-slate-200/60 dark:border-slate-800/80">
+          <Mail className="w-4 h-4 text-indigo-500 shrink-0" />
+          <span className="text-xs font-bold text-slate-500 dark:text-slate-400 shrink-0">Filter Account:</span>
+          <select
+            value={accountFilter}
+            onChange={(e) => setAccountFilter(e.target.value)}
+            className="py-1.5 px-2.5 rounded-[10px] bg-white dark:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-200 focus:outline-none border border-slate-200 dark:border-slate-700 cursor-pointer"
+          >
+            <option value="all">All Sender Accounts ({accounts.length})</option>
+            {accounts.map((acc) => (
+              <option key={acc.id} value={acc.email}>
+                {acc.email} {acc.isPrimary ? '(Primary)' : ''}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* Search & Action Bar */}
